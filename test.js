@@ -28,6 +28,7 @@ const day = (o = {}) => ({ station: 'valdesqui', desnivel: 9000, km: 45, horas: 
   t('ranking estación', (await call('GET', '/api/rank?station=valdesqui', null, T))[1].me?.pos > 0);
   [s, j] = await call('GET', '/api/stations', null, T); t('estaciones', j.valdesqui?.skiers > 0);
   [s, j] = await call('GET', '/api/feed?scope=amigos', null, T); t('feed amigos', s === 200 && Array.isArray(j));
+  await call('POST', '/api/register', { email: 'marta@b.es', password: '12345678', alias: 'Marta Test' });
   [s, j] = await call('GET', "/api/users?q=%25_", null, T); t('búsqueda con comodines', s === 200 && j.length === 0);
   [s, j] = await call('GET', '/api/users?q=mar', null, T); const other = j[0]; t('búsqueda', other?.id);
   t('seguir', (await call('POST', '/api/follow', { id: other.id }, T))[1].following !== undefined);
@@ -49,6 +50,16 @@ const day = (o = {}) => ({ station: 'valdesqui', desnivel: 9000, km: 45, horas: 
   t('sesión anterior invalidada', (await call('GET', '/api/me', null, T))[0] === 401);
   t('login con la vieja falla', (await call('POST', '/api/login', { email: 'a@b.es', password: '12345678' }))[0] === 401);
   [s, j] = await call('POST', '/api/login', { email: 'a@b.es', password: 'nueva12345' }); t('login con la nueva', s === 200); const T2 = j.token;
+  // perfil, edad (RGPD) y avatar
+  t('edad menor de 14 rechazada', (await call('POST', '/api/me', { age: 12 }, T2))[0] === 400);
+  [s, j] = await call('POST', '/api/me', { age: 24, bio: 'Esquiador de Sierra Nevada', modality: 'ski', level: 'avanzado', station_home: 'sierra-nevada' }, T2);
+  t('actualizar perfil', s === 200 && j.user.age === 24 && j.user.bio === 'Esquiador de Sierra Nevada' && j.user.station_home === 'sierra-nevada');
+  t('avatar falso rechazado', (await call('POST', '/api/avatar', { image: 'data:image/png;base64,bm90YW5pbWFnZQ==' }, T2))[0] === 400);
+  const png1px = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  [s, j] = await call('POST', '/api/avatar', { image: png1px }, T2); t('subir avatar seguro', s === 200 && j.avatar?.startsWith('/avatars/')); const avUrl = j.avatar;
+  let avRes = await fetch(B + avUrl); t('servir avatar físico', avRes.status === 200 && avRes.headers.get('content-type') === 'image/png');
+  [s, j] = await call('GET', '/api/me/export', null, T2); t('exportar datos RGPD con hash', s === 200 && j.integrity_sha256?.length === 64 && j.audit_trail?.length > 0);
+  t('borrar avatar', (await call('DELETE', '/api/avatar', null, T2))[0] === 200);
   // estáticos y cabeceras
   let r = await fetch(B + '/'); t('página + CSP', r.status === 200 && /default-src/.test(r.headers.get('content-security-policy')));
   r = await fetch(B + '/3d/'); t('mapas 3D servidos', r.status === 200 && /html/.test(r.headers.get('content-type')), r.status);
