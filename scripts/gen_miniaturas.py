@@ -2,13 +2,16 @@
 Uso: python scripts/gen_miniaturas.py   (lee mapas/estaciones/<id>/data; necesita Pillow)"""
 import json, sys
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageEnhance
+from PIL import Image, ImageDraw, ImageEnhance, ImageOps
+import math
 
 RAIZ = Path(__file__).resolve().parent.parent
 SAL = RAIZ / 'public' / 'img'; SAL.mkdir(parents=True, exist_ok=True)
 W, H, SS = 520, 546, 2          # salida y supermuestreo del trazo
 COL = {'novice': (53, 194, 138), 'easy': (77, 141, 255), 'intermediate': (239, 83, 80),
        'advanced': (20, 20, 24), 'expert': (20, 20, 24), 'freeride': (20, 20, 24)}
+
+DATOS = {}
 
 def hacer(est):
     d = RAIZ / 'mapas' / 'estaciones' / est / 'data'
@@ -27,19 +30,24 @@ def hacer(est):
     caja = (cx - ancho / 2, cz - alto / 2, cx + ancho / 2, cz + alto / 2)
     c = [(caja[0] - x0) * sx, (caja[1] - z0) * sz, (caja[2] - x0) * sx, (caja[3] - z0) * sz]
     base = img.crop(tuple(int(round(v)) for v in c)).resize((W * SS, H * SS), Image.LANCZOS)
-    base = ImageEnhance.Brightness(base).enhance(.62)
-    base = ImageEnhance.Contrast(base).enhance(1.1)
+    # tratamiento común: niveles automáticos (iguala teselas y estaciones), menos color y un velo azul frío de invierno
+    base = ImageOps.autocontrast(base, cutoff=1.5)
+    base = ImageEnhance.Color(base).enhance(.5)
+    base = Image.blend(base, Image.new('RGB', base.size, (34, 58, 96)), .26)
+    base = ImageEnhance.Brightness(base).enhance(.8)
     cap = Image.new('RGBA', base.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(cap)
     k = W * SS / ancho
     P = lambda pts: [((x - caja[0]) * k, (z - caja[1]) * k) for x, z in pts]
     for l in f['lifts']:
-        if len(l['pts']) > 1: dr.line(P(l['pts']), fill=(255, 255, 255, 190), width=2 * SS // 2 + 1)
+        if len(l['pts']) > 1: dr.line(P(l['pts']), fill=(255, 255, 255, 190), width=SS)
     for l in sorted(f['pistes'], key=lambda p: p.get('difficulty') in ('advanced', 'expert')):
         if len(l['pts']) < 2: continue
         q = P(l['pts']); col = COL.get(l.get('difficulty'), (230, 230, 235))
-        dr.line(q, fill=(255, 255, 255, 235), width=int(4.6 * SS), joint='curve')
-        dr.line(q, fill=col + (255,), width=int(2.8 * SS), joint='curve')
+        dr.line(q, fill=(255, 255, 255, 235), width=int(3.8 * SS), joint='curve')
+        dr.line(q, fill=col + (255,), width=int(2.2 * SS), joint='curve')
     out = Image.alpha_composite(base.convert('RGBA'), cap).convert('RGB').resize((W, H), Image.LANCZOS)
+    nombres = lambda L: len({l['name'] for l in L if l.get('name')}) or len(L)   # OSM parte las pistas en tramos: se cuentan nombres distintos
+    DATOS[est] = {'pistas': nombres(f['pistes']), 'remontes': nombres(f['lifts'])}
     out.save(SAL / f'{est}.webp', quality=76, method=6)
     return (SAL / f'{est}.webp').stat().st_size // 1024
 
@@ -48,3 +56,4 @@ if __name__ == '__main__':
     for e in ids:
         try: print(e, hacer(e), 'KB')
         except Exception as ex: print(e, 'ERROR', type(ex).__name__, ex)
+    (SAL / 'estaciones.json').write_text(json.dumps(DATOS, ensure_ascii=False), encoding='utf-8')   # cifras medidas: pistas, remontes y km de pista

@@ -81,7 +81,7 @@ const ini=n=>esc(n.split(' ').map(w=>w[0]).slice(0,2).join(''));
 const av=(n,me)=>`<span class="av">${ini(n)}</span>`;
 const ago=t=>{const h=(Date.now()-t)/36e5;return h<1?'Hace minutos':h<24?`Hace ${Math.floor(h)} h`:h<48?'Ayer':`Hace ${Math.floor(h/24)} días`};
 let st={tab:'est',met:'desnivel',amb:'España',per:'temporada',flt:'Todas',scope:'Amigos',toast:0,user:null,token:localStorage.getItem('pistea_t'),me:null,stats:[],feed:[],rank:null,mode:'login',err:''};
-let T,W=null,qt,rq=0;st.sim=true;
+let T,W=null,qt,rq=0,SI={};st.sim=true;fetch('/img/estaciones.json').then(r=>r.json()).then(j=>{SI=j;if(st.me)render()}).catch(()=>{});
 const feedQ=()=>'feed?scope='+(st.scope==='Amigos'?'amigos':'todos');
 async function api(path,opt={}){
  let r;try{r=await fetch('/api/'+path,{method:opt.method||(opt.body?'POST':'GET'),headers:{'Content-Type':'application/json',...(st.token?{Authorization:'Bearer '+st.token}:{})},body:opt.body?JSON.stringify(opt.body):undefined})}catch(e){throw new Error('Sin conexión con el servidor. Revisa tu internet.')}
@@ -90,7 +90,7 @@ async function api(path,opt={}){
  if(!r.ok)throw new Error(j.error||'Error del servidor');return j}
 const seg=(arr,cur,fn)=>`<div class="seg">${arr.map(a=>`<button class="${a===cur?'on':''}" onclick="${fn}('${a}')">${a[0].toUpperCase()+a.slice(1)}</button>`).join('')}</div>`;
 const pills=(arr,cur,fn)=>`<div class="pills">${arr.map(a=>`<button class="${a===cur?'on':''}" onclick="${fn}('${a}')">${a}</button>`).join('')}</div>`;
-const stCard=(s,fn='ficha')=>{const k=(st.stats[s.id]||{}).skiers||0;return `<div class="st" style="background-image:url(/img/${s.id}.webp)" onclick="${fn}('${s.id}')"><span class="live"><i class="dot ${k?'on':''}"></i>${k} ${k===1?'esquiador':'esquiadores'}</span><b>${s.n}</b><small>${s.z}</small></div>`};
+const stCard=(s,fn='ficha')=>{const k=(st.stats[s.id]||{}).skiers||0;return `<div class="st" style="background-image:url(/img/${s.id}.webp)" onclick="${fn}('${s.id}')"><span class="live"><i class="dot ${k?'on':''}"></i>${k} ${k===1?'esquiador':'esquiadores'}</span><b>${s.n}</b><small>${s.z}${SI[s.id]?' · '+SI[s.id].pistas+' pistas':''}</small></div>`};
 const trk=(t,w=300,h=120)=>{if(!t||t.length<2)return '';const xs=t.map(p=>p[0]),ys=t.map(p=>p[1]),mx=Math.max(...xs)||1,my=Math.max(...ys)||1,d=t.map((p,i)=>(i?'L':'M')+(12+p[0]/mx*(w-24)).toFixed(1)+' '+(12+p[1]/my*(h-24)).toFixed(1)).join('');return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><path d="${d}" fill="none" stroke="#f4f5f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`};
 
 // ---------- sesión ----------
@@ -160,9 +160,10 @@ async function profile(id){try{const u=await api('user?id='+id);ov(`<div class="
 async function kudo(id,b){try{const r=await api('kudos',{body:{id}});b.classList.toggle('on',r.liked);b.querySelector('span').textContent=r.kudos}catch(e){flash(e.message)}}
 function ov(h){clearInterval(T);if(W!=null){navigator.geolocation.clearWatch(W);W=null}const o=$('.ov');if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov"><button class="x" onclick="ov0()">${ic('x')}</button>${h}</div>`)}
 function ficha(i){const s=SM[i],info=st.stats[i]||{leaders:[],skiers:0};
- ov(`<div class="top" style="margin:0 -20px;padding:70px 20px 20px;background:linear-gradient(180deg,#0b0c0f66,#0b0c0f 96%),url(/img/${i}.webp) center/cover"><div class="eyebrow" style="color:#c9ced8">${s.z}</div><h1>${s.n}</h1><small style="color:#c9ced8">${info.skiers} ${info.skiers===1?'esquiador':'esquiadores'} esta temporada</small></div>
+ ov(`<div class="top" style="margin:0 -20px;padding:70px 20px 20px;background:linear-gradient(180deg,#0b0c0f66,#0b0c0f 96%),url(/img/${i}.webp) center/cover"><div class="eyebrow" style="color:#c9ced8">${s.z}</div><h1>${s.n}</h1></div>
+ ${SI[i]?`<div class="kpis" style="margin:14px 0"><div><b>${SI[i].pistas}</b><small>pistas</small></div><div><b>${SI[i].remontes}</b><small>remontes</small></div><div><b>${info.skiers}</b><small>esquiadores</small></div></div>`:''}
  <div id="m3d" class="map" style="height:220px;margin-top:0;display:grid;place-items:center;cursor:pointer" onclick="load3d('${i}')"><div style="text-align:center">${ic('map')}<div style="font-weight:600;margin-top:6px">Explorar en 3D</div><small>Relieve, pistas y remontes reales</small></div></div>
- <button class="btn" style="margin-top:12px" onclick="traquear('${i}')">Traquear aquí</button>
+ <small style="display:block;margin-top:8px">Pistas y remontes según OpenStreetMap (recuento aproximado). Fotografía aérea del IGN.</small><button class="btn" style="margin-top:12px" onclick="traquear('${i}')">Traquear aquí</button>
  <h2>Líderes de la temporada</h2>${info.leaders.length?info.leaders.map((x,k)=>`<div class="row"><span class="pos">${k+1}</span>${av(x.alias)}<b style="font-weight:600">${esc(x.alias)}</b><span class="val">${fmt(x.v)} m</span></div>`).join(''):'<div class="empty">Nadie ha esquiado aquí todavía. Sé el primero.</div>'}
  <button class="btn gh" style="margin-top:14px" onclick="st.amb='${s.n}';st.met='desnivel';ov0();tab('rec')">Ver clasificación completa</button>`)}
 function load3d(i){const m=$('#m3d');m.onclick=null;m.style.cssText='height:380px;padding:0;overflow:hidden;position:relative;margin-top:0';m.innerHTML=`<iframe src="/3d/?estacion=${i}" title="Mapa 3D" allow="fullscreen; geolocation" style="width:100%;height:100%;border:0"></iframe><button class="kudo" style="position:absolute;right:8px;top:8px;background:var(--bg)" onclick="big3d(this)">Ampliar</button>`}
