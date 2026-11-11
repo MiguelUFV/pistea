@@ -1,0 +1,22 @@
+services:
+  pistea:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_URL: https://${DOMAIN}
+    volumes:
+      - datos:/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+    depends_on: [pistea]
+volumes:
+  datos:
+  caddy_datos:

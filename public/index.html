@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pistea</title><link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg"><meta name="theme-color" content="#0b0c0f">
+<style>
+:root{--bg:#0b0c0f;--s1:#13151a;--s2:#1a1d24;--ln:#242832;--tx:#f4f5f7;--mu:#8a909c;--ac:#8ab4ff;--g:#35c28a;--b:#4d8dff;--r:#ef5350;--k:#d6d8de}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#050608;color:var(--tx);font:15px/1.4 -apple-system,"Segoe UI",Inter,Roboto,sans-serif;display:flex;justify-content:center;font-variant-numeric:tabular-nums}
+#app{width:100%;max-width:440px;height:100dvh;background:var(--bg);position:relative;display:flex;flex-direction:column;overflow:hidden}
+main{flex:1;overflow-y:auto;padding:0 20px 28px;scrollbar-width:none}main::-webkit-scrollbar{display:none}
+.top{padding:26px 0 14px}.eyebrow{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--mu);font-weight:600}
+h1{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15;margin-top:4px}
+h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--mu);font-weight:600;margin:26px 0 10px}
+.mu,small{color:var(--mu)}small{font-size:12.5px}
+svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+nav{display:flex;align-items:center;border-top:1px solid var(--ln);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;background:none;border:0;color:var(--mu);font:500 10.5px inherit;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;cursor:pointer}
+nav button.on{color:var(--tx)}
+nav .go{flex:none;width:54px;height:54px;border-radius:50%;background:var(--tx);color:#000;margin:0 6px;justify-content:center;padding:0}
+.seg{display:flex;background:var(--s1);border-radius:10px;padding:3px;margin-bottom:12px}
+.seg button{flex:1;border:0;background:none;color:var(--mu);font:500 13px inherit;padding:8px 0;border-radius:8px;cursor:pointer}
+.seg button.on{background:var(--s2);color:var(--tx)}
+.tabs{display:flex;gap:20px;overflow-x:auto;border-bottom:1px solid var(--ln);margin:0 -20px 14px;padding:0 20px;scrollbar-width:none}
+.tabs button{flex:none;background:none;border:0;border-bottom:2px solid transparent;color:var(--mu);font:500 14px inherit;padding:10px 0;cursor:pointer}
+.tabs button.on{color:var(--tx);border-color:var(--tx)}
+.pills{display:flex;gap:8px;overflow-x:auto;margin:0 -20px 14px;padding:0 20px;scrollbar-width:none}
+.pills button{flex:none;border:1px solid var(--ln);background:none;color:var(--mu);font:500 13px inherit;padding:7px 13px;border-radius:99px;cursor:pointer}
+.pills button.on{background:var(--tx);color:#000;border-color:var(--tx)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st{aspect-ratio:1/1.05;border-radius:14px;border:1px solid var(--ln);padding:14px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;position:relative;overflow:hidden;background:var(--s1)}
+.st::before{content:"";position:absolute;inset:0;background:repeating-radial-gradient(ellipse at var(--x) var(--y),transparent 0 9px,#ffffff0d 9px 10px)}
+.st>*{position:relative}.st b{font-size:15px;font-weight:600}
+.st .live{position:absolute;top:12px;left:14px;font-size:11px;color:var(--mu);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--mu);display:inline-block}.dot.on{background:var(--g)}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:14px;padding:16px;margin-bottom:10px}
+.btn{width:100%;border:0;border-radius:12px;padding:15px;font:600 15px inherit;background:var(--tx);color:#000;cursor:pointer}
+.btn.gh{background:var(--s2);color:var(--tx)}.btn.dg{background:none;color:var(--r);border:1px solid #4a2326}.btn+.btn{margin-top:8px}.btn:disabled{opacity:.5}
+.big{font-size:52px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.bar{height:4px;border-radius:4px;background:var(--s2);overflow:hidden;margin-top:12px}.bar i{display:block;height:100%;background:var(--tx)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--ln);border-radius:14px;overflow:hidden;background:var(--s1)}
+.kpis div{padding:14px 12px;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln)}
+.kpis div:nth-child(3n){border-right:0}.kpis div:nth-last-child(-n+3){border-bottom:0}
+.kpis b{font-size:20px;font-weight:650;display:block;letter-spacing:-.01em}.kpis small{font-size:11.5px}
+.row{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--ln)}
+.row.me{background:var(--s1);border-radius:12px;border:1px solid var(--ac);padding:12px;margin:6px 0}
+.pos{width:22px;font-weight:600;color:var(--mu);font-size:14px}.row:nth-child(-n+3) .pos{color:var(--tx)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--s2);border:1px solid var(--ln);display:grid;place-items:center;font-weight:600;font-size:13px;flex:none}
+.me .av{background:var(--tx);color:#000}.val{margin-left:auto;font-weight:600;text-align:right}
+.hero{padding:20px;border-radius:16px;border:1px solid var(--ln);background:var(--s1);position:relative;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:repeating-radial-gradient(ellipse at 90% 0,transparent 0 12px,#ffffff0a 12px 13px)}.hero>*{position:relative}
+.map{height:120px;border-radius:10px;margin:12px 0;background:var(--s2) repeating-radial-gradient(ellipse at 20% 120%,transparent 0 10px,#ffffff0a 10px 11px)}
+.ov{position:absolute;inset:0;background:var(--bg);z-index:5;overflow-y:auto;padding:0 20px 28px;animation:up .22s ease-out;scrollbar-width:none}
+@keyframes up{from{transform:translateY(24px);opacity:0}}
+.x{position:sticky;top:14px;float:right;background:var(--s2);border:1px solid var(--ln);color:var(--tx);width:34px;height:34px;border-radius:50%;cursor:pointer;z-index:3;display:grid;place-items:center;margin-top:14px}
+.speed{text-align:center;padding-top:60px}.speed .n{font-size:128px;font-weight:700;letter-spacing:-.05em;line-height:1}
+.stack{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;margin:4px 0 12px}.stack i{display:block}
+.leg{display:flex;justify-content:space-between;font-size:13px}.leg span:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:6px}
+.bdg{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.bdg div{text-align:center;font-size:11px;color:var(--mu);padding:12px 4px;border:1px solid var(--ln);border-radius:12px;opacity:.5}
+.bdg div.on{color:var(--tx);border-color:#454b58;background:var(--s1);opacity:1}.bdg svg{display:block;margin:0 auto 6px}
+.toast{position:sticky;top:12px;z-index:4;background:var(--tx);color:#000;padding:12px 14px;border-radius:12px;font-weight:600;font-size:14px;margin-top:12px;animation:up .3s}
+.chipTag{font-size:11px;border:1px solid var(--ln);border-radius:99px;padding:3px 9px;color:var(--mu);display:inline-block}.chipTag.on{color:var(--tx);border-color:#555c6b}
+.kudo{background:none;border:1px solid var(--ln);color:var(--mu);border-radius:99px;padding:6px 12px;font:500 13px inherit;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.kudo.on{color:#000;background:var(--tx);border-color:var(--tx)}.kudo svg{width:16px;height:16px}
+.auth{max-width:440px;margin:auto;padding:0 24px 40px;display:flex;flex-direction:column;justify-content:center;min-height:100%}
+.logo{font-size:15px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;margin-bottom:34px;display:flex;gap:10px;align-items:center}
+label{display:block;font-size:12.5px;color:var(--mu);margin:14px 0 6px}
+input{width:100%;background:var(--s1);border:1px solid var(--ln);border-radius:10px;padding:13px 14px;color:var(--tx);font:inherit;outline:none}input:focus{border-color:var(--ac)}
+.err{color:var(--r);font-size:13px;min-height:20px;margin:12px 0 4px}
+.link{background:none;border:0;color:var(--ac);font:inherit;cursor:pointer;padding:0}
+.empty{text-align:center;color:var(--mu);padding:30px 10px;border:1px dashed var(--ln);border-radius:14px}
+</style></head><body><div id="app"><main id="m"></main><nav id="nav"></nav></div>
+<script>
+const $=s=>document.querySelector(s),fmt=n=>Math.round(n).toLocaleString('es-ES');
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const IC={est:'<path d="M3 20l6-10 4 6 3-4 5 8z"/>',com:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5M16 5.2a3 3 0 010 5.6M18.5 14.8c1.7.7 2.5 2.2 2.5 4.2"/>',go:'<path d="M5 18l3-9 4 3 3-7M4 21h16"/>',rec:'<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3"/>',yo:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',up:'<path d="M12 19V5M6 11l6-6 6 6"/>',heart:'<path d="M12 20s-7-4.6-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.4-7 10-7 10z"/>',lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',star:'<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',flame:'<path d="M12 3c1 4 5 5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z"/>',bolt:'<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',map:'<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/>',clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>'};
+const ic=(n)=>`<svg class="i" viewBox="0 0 24 24">${IC[n]}</svg>`;
+const S=[['alto-campoo','Alto Campoo','Cantábrica'],['astun','Astún','Pirineos'],['baqueira-beret','Baqueira Beret','Pirineos'],['boi-taull','Boí Taüll','Pirineos'],['candanchu','Candanchú','Pirineos'],['cerler','Cerler','Pirineos'],['espot','Espot','Pirineos'],['formigal','Formigal','Pirineos'],['fuentes-de-invierno','Fuentes de Invierno','Cantábrica'],['javalambre','Javalambre','Ibérica'],['la-covatilla','La Covatilla','Central'],['la-molina','La Molina','Pirineos'],['la-pinilla','La Pinilla','Central'],['leitariegos','Leitariegos','Cantábrica'],['manzaneda','Manzaneda','Galicia'],['masella','Masella','Pirineos'],['panticosa','Panticosa','Pirineos'],['port-aine','Port Ainé','Pirineos'],['port-del-comte','Port del Comte','Pirineos'],['san-isidro','San Isidro','Cantábrica'],['sierra-nevada','Sierra Nevada','Bética'],['valdelinares','Valdelinares','Ibérica'],['valdesqui','Valdesquí','Central'],['valdezcaray','Valdezcaray','Ibérica'],['valgrande-pajares','Valgrande-Pajares','Cantábrica'],['vall-de-nuria','Vall de Núria','Pirineos'],['vallter','Vallter','Pirineos']]
+ .map((a,i)=>({id:a[0],n:a[1],z:a[2],x:(i*37%100)+'%',y:(i*61%100)+'%'})),SM=Object.fromEntries(S.map(s=>[s.id,s]));
+const MET={desnivel:'Desnivel',km:'Kilómetros',horas:'Horas esquiando',bajadas:'Bajadas',dias:'Días',vmax:'Vel. máxima'};
+const show=(m,v)=>m==='horas'?v.toFixed(0)+' h':m==='vmax'?v.toFixed(0)+' km/h':m==='km'?fmt(v)+' km':m==='desnivel'?fmt(v)+' m':fmt(v);
+const ini=n=>esc(n.split(' ').map(w=>w[0]).slice(0,2).join(''));
+const av=(n,me)=>`<span class="av">${ini(n)}</span>`;
+const ago=t=>{const h=(Date.now()-t)/36e5;return h<1?'Hace minutos':h<24?`Hace ${Math.floor(h)} h`:h<48?'Ayer':`Hace ${Math.floor(h/24)} días`};
+let st={tab:'est',met:'desnivel',amb:'España',per:'temporada',flt:'Todas',scope:'Amigos',toast:0,user:null,token:localStorage.getItem('pistea_t'),me:null,stats:[],feed:[],rank:null,mode:'login',err:''};
+let T,W=null,qt,rq=0;st.sim=true;
+const feedQ=()=>'feed?scope='+(st.scope==='Amigos'?'amigos':'todos');
+async function api(path,opt={}){
+ let r;try{r=await fetch('/api/'+path,{method:opt.method||(opt.body?'POST':'GET'),headers:{'Content-Type':'application/json',...(st.token?{Authorization:'Bearer '+st.token}:{})},body:opt.body?JSON.stringify(opt.body):undefined})}catch(e){throw new Error('Sin conexión con el servidor. Revisa tu internet.')}
+ const j=await r.json().catch(()=>({}));
+ if(r.status===401&&st.token&&!path.startsWith('login')){st.err='Tu sesión ha caducado. Entra de nuevo.';logout(true);throw new Error(j.error||'Sesión caducada')}
+ if(!r.ok)throw new Error(j.error||'Error del servidor');return j}
+const seg=(arr,cur,fn)=>`<div class="seg">${arr.map(a=>`<button class="${a===cur?'on':''}" onclick="${fn}('${a}')">${a[0].toUpperCase()+a.slice(1)}</button>`).join('')}</div>`;
+const pills=(arr,cur,fn)=>`<div class="pills">${arr.map(a=>`<button class="${a===cur?'on':''}" onclick="${fn}('${a}')">${a}</button>`).join('')}</div>`;
+const stCard=(s,fn='ficha')=>{const k=(st.stats[s.id]||{}).skiers||0;return `<div class="st" style="--x:${s.x};--y:${s.y}" onclick="${fn}('${s.id}')"><span class="live"><i class="dot ${k?'on':''}"></i>${k} ${k===1?'esquiador':'esquiadores'}</span><b>${s.n}</b><small>${s.z}</small></div>`};
+const trk=(t,w=300,h=120)=>{if(!t||t.length<2)return '';const xs=t.map(p=>p[0]),ys=t.map(p=>p[1]),mx=Math.max(...xs)||1,my=Math.max(...ys)||1,d=t.map((p,i)=>(i?'L':'M')+(12+p[0]/mx*(w-24)).toFixed(1)+' '+(12+p[1]/my*(h-24)).toFixed(1)).join('');return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><path d="${d}" fill="none" stroke="#f4f5f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`};
+
+// ---------- sesión ----------
+function authView(){const m=st.mode,info=st.info?`<div style="color:var(--g);font-size:13px;margin:12px 0 0">${esc(st.info)}</div>`:'';
+ const T={login:['Bienvenido de nuevo','Entra para seguir tu temporada.'],reg:['Crea tu cuenta','Registra tus días de esquí y compárate con toda España.'],forgot:['Recupera tu contraseña','Te enviaremos un enlace al correo para crear una nueva.'],reset:['Nueva contraseña','Elige una contraseña de al menos 8 caracteres.']}[m];
+ const f=(m==='reg'?'<label>Nombre público</label><input id="al" maxlength="24" autocomplete="nickname" required>':'')+(m!=='reset'?'<label>Correo electrónico</label><input id="em" type="email" autocomplete="email" maxlength="254" required>':'')+(m==='forgot'?'':`<label>${m==='reset'?'Nueva contraseña':'Contraseña'}${m==='login'?'':' (mín. 8 caracteres)'}</label><input id="pw" type="password" autocomplete="${m==='login'?'current-password':'new-password'}" minlength="${m==='login'?1:8}" maxlength="128" required>`);
+ const btn={login:'Entrar',reg:'Crear cuenta',forgot:'Enviar enlace',reset:'Guardar contraseña'}[m];
+ const foot=m==='login'?'<button class="link" onclick="go(\'forgot\')">¿Olvidaste tu contraseña?</button><br><br>¿Eres nuevo? <button class="link" onclick="go(\'reg\')">Crear cuenta</button>':m==='reg'?'¿Ya tienes cuenta? <button class="link" onclick="go(\'login\')">Entrar</button>':'<button class="link" onclick="go(\'login\')">Volver a entrar</button>';
+ return `<div class="auth"><div class="logo">${ic('est')} Pistea</div><h1>${T[0]}</h1><p class="mu" style="margin-top:8px">${T[1]}</p>${info}<form onsubmit="return submitAuth(event)">${f}<div class="err" id="er">${esc(st.err)}</div><button class="btn" id="sb">${btn}</button></form><p style="margin-top:20px;text-align:center" class="mu">${foot}</p></div>`}
+const go=m=>{st.mode=m;st.err='';st.info='';render()};
+async function submitAuth(e){e.preventDefault();const m=st.mode,v=id=>$('#'+id)?$('#'+id).value:'',em=v('em'),al=v('al');$('#sb').disabled=true;
+ try{
+  if(m==='forgot'){await api('forgot',{body:{email:em}});st.mode='login';st.err='';st.info='Si ese correo tiene cuenta, te hemos enviado un enlace. Revisa también el spam.';render();return false}
+  if(m==='reset'){await api('reset',{body:{token:st.resetToken,password:v('pw')}});st.resetToken=null;st.mode='login';st.err='';st.info='Contraseña cambiada. Ya puedes entrar con la nueva.';render();return false}
+  const r=await api(m==='reg'?'register':'login',{body:{email:em,password:v('pw'),alias:al}});st.token=r.token;localStorage.setItem('pistea_t',r.token);st.err='';st.info='';await boot()
+ }catch(x){st.err=x.message;st.info='';render();if($('#em'))$('#em').value=em;if($('#al'))$('#al').value=al}return false}
+function logout(silent){if(!silent)api('logout',{method:'POST',body:{}}).catch(()=>{});localStorage.removeItem('pistea_t');st.token=null;st.user=null;st.me=null;st.mode='login';render()}
+async function delAccount(){const pw=prompt('Se borrarán tu cuenta y todos tus días. Escribe tu contraseña para confirmar:');if(!pw)return;try{await api('me',{method:'DELETE',body:{password:pw}});logout(true)}catch(e){flash(e.message)}}
+function flash(t){const d=document.createElement('div');d.className='toast';d.style.cssText='position:absolute;left:20px;right:20px;top:14px;z-index:20';d.textContent=t;$('#app').appendChild(d);setTimeout(()=>d.remove(),3500)}
+async function boot(){try{await refresh();render()}catch(x){st.err=st.err||x.message;st.me=null;render()}}
+async function refresh(){const[m,s,f]=await Promise.all([api('me'),api('stations'),api(feedQ())]);st.me=m;st.user=m.user;st.stats=s;st.feed=f}
+
+// ---------- vistas ----------
+const V={
+est(){const zs=['Todas',...new Set(S.map(s=>s.z))],l=S.filter(s=>st.flt==='Todas'||s.z===st.flt),t=st.me.totals;
+ return `<div class="top"><div class="eyebrow">Hola, ${esc(st.user.alias.split(' ')[0])}</div><h1>Elige tu estación</h1></div>
+ <div class="hero" style="margin-bottom:18px"><div class="eyebrow">Tu temporada</div><div class="big" style="margin-top:10px">${fmt(t.desnivel)}<span class="mu" style="font-size:18px;font-weight:500"> m</span></div><small style="display:block;margin-top:10px">${t.dias} ${t.dias===1?'día':'días'} · ${fmt(t.km)} km · ${st.me.pos?'puesto '+st.me.pos+' en España':'aún sin clasificar'}</small></div>
+ <div class="grid" style="margin-bottom:18px"><div class="card" style="margin:0"><div class="eyebrow">Liga semanal</div><div style="font-size:22px;font-weight:700;margin-top:6px">${st.me.league.tier||'Sin clasificar'}</div><small>${st.me.league.tier?`Puesto ${st.me.league.pos} de ${st.me.league.total} esta semana`:'Esquía para entrar'}</small></div><div class="card" style="margin:0"><div class="eyebrow">Racha</div><div style="font-size:22px;font-weight:700;margin-top:6px">${st.me.streak} ${st.me.streak===1?'semana':'semanas'}</div><small>${st.me.streak?'Esquía esta semana para mantenerla':'Empieza tu racha'}</small></div></div>
+ ${pills(zs,st.flt,'setF')}<div class="grid">${l.map(s=>stCard(s)).join('')}</div>`},
+rec(){const r=st.rank;if(!r)return `<div class="top"><h1>Récords</h1></div><div class="empty">Cargando…</div>`;
+ const rows=r.rows.map(x=>`<div class="row ${x.me?'me':''}"><span class="pos">${x.pos}</span>${av(x.alias)}<b style="font-weight:600">${esc(x.alias)}</b><span class="val">${show(st.met,x.v)}</span></div>`).join('');
+ return `<div class="top"><div class="eyebrow">Clasificación</div><h1>Récords</h1></div>
+ <div class="tabs">${Object.keys(MET).map(k=>`<button class="${k===st.met?'on':''}" onclick="setM('${k}')">${MET[k]}</button>`).join('')}</div>
+ ${seg(['hoy','semana','temporada'],st.per,'setP')}${pills(['España',...S.map(s=>s.n)],st.amb,'setA')}
+ <div class="hero" style="margin-bottom:12px"><div class="eyebrow">Tu posición · ${esc(st.amb)}</div><div class="big" style="margin-top:8px">${r.me?'#'+r.me.pos:'—'}</div>
+ <small style="display:block;margin-top:8px">${r.me?(r.me.pos>1?`Te faltan ${show(st.met,r.gap)} para subir un puesto.`:'Lideras esta clasificación.'):'Todavía no tienes actividad en este filtro.'}</small></div>
+ ${rows||'<div class="empty">Nadie ha esquiado aquí todavía. Sé el primero.</div>'}`},
+com(){const f=st.feed,head=`<div class="top"><div class="eyebrow">Actividad</div><h1>Comunidad</h1></div>${seg(['Amigos','España','Buscar'],st.scope,'setS')}`;
+ if(st.scope==='Buscar')return head+`<input id="q" placeholder="Buscar esquiadores por nombre" oninput="search(this.value)" value="${esc(st.q||'')}"><div id="res" style="margin-top:12px">${resHtml()}</div>`;
+ return head+(f.length?f.map(d=>`<div class="card"><div style="display:flex;gap:12px;align-items:center;cursor:pointer" onclick="profile('${d.uid}')">${av(d.alias)}<div><b style="font-weight:600">${esc(d.alias)}</b><br><small>${esc(SM[d.station].n)} · ${ago(d.ts)}</small></div></div>
+ <div class="map">${trk(d.track)}</div>
+ <div class="kpis" style="margin-bottom:12px"><div><b>${fmt(d.desnivel)}</b><small>m desnivel</small></div><div><b>${d.km.toFixed(1)}</b><small>km</small></div><div><b>${d.bajadas}</b><small>bajadas</small></div></div>
+ <button class="kudo ${d.liked?'on':''}" onclick="kudo('${d.id}',this)">${ic('heart')} <span>${d.kudos}</span> apoyos</button></div>`).join(''):`<div class="empty">${st.scope==='Amigos'?'Tus amigos no han esquiado aún. Busca esquiadores y sigue a más gente.':'Aún no hay actividad.'}</div>`)},
+yo(){const t=st.me.totals,vis=st.me.stations,days=st.me.days;
+ const B=[['star','Primera bajada',t.bajadas>0],['bolt','100 km/h',t.vmax>=100],['flame','5 días',t.dias>=5],['map','5 estaciones',vis.length>=5],['up','10.000 m',t.desnivel>=10000],['clock','20 horas',t.horas>=20],['star','Top 10',st.me.pos>0&&st.me.pos<=10],['lock','Líder',st.me.pos===1]];
+ return `<div class="top"><div style="display:flex;gap:14px;align-items:center"><span class="av" style="width:56px;height:56px;font-size:19px;background:var(--tx);color:#000">${ini(st.user.alias)}</span><div><h1 style="margin:0;font-size:24px">${esc(st.user.alias)}</h1><small>${esc(st.user.email)} · puesto ${st.me.pos||'—'}</small></div></div></div>
+ <div class="kpis"><div><b>${fmt(t.desnivel)}</b><small>m desnivel</small></div><div><b>${fmt(t.km)}</b><small>km</small></div><div><b>${t.horas.toFixed(1)}</b><small>horas</small></div></div>
+ <h2>Estaciones · ${vis.length} de ${S.length}</h2><div class="card"><div style="display:flex;flex-wrap:wrap;gap:6px">${S.map(s=>`<span class="chipTag ${vis.includes(s.id)?'on':''}">${esc(s.n)}</span>`).join('')}</div><div class="bar"><i style="width:${vis.length/S.length*100}%"></i></div></div>
+ <h2>Insignias</h2><div class="bdg">${B.map(b=>`<div class="${b[2]?'on':''}">${ic(b[0])}${b[1]}</div>`).join('')}</div>
+ <h2>Mis días</h2>${days.length?days.map(d=>`<div class="row"><div><b style="font-weight:600">${esc(SM[d.station].n)}</b><br><small>${ago(d.ts)} · ${d.bajadas} bajadas</small></div><span class="val">${fmt(d.desnivel)} m</span></div>`).join(''):'<div class="empty">Aún no has grabado ningún día. Pulsa el botón central.</div>'}
+ <h2>Cuenta</h2><button class="btn gh" onclick="logout()">Cerrar sesión</button><button class="btn dg" onclick="delAccount()">Eliminar cuenta y datos</button>`}
+};
+function render(){
+ if(!st.token||!st.me){$('#m').innerHTML=authView();$('#nav').style.display='none';return}
+ $('#nav').style.display='';$('#m').innerHTML=(st.toast?`<div class="toast">${esc(st.toast)}</div>`:'')+V[st.tab]();
+ $('#nav').innerHTML=[['est','Estaciones'],['com','Comunidad'],['go','Traquear'],['rec','Récords'],['yo','Perfil']].map(t=>t[0]==='go'?`<button class="go" onclick="elegir()" aria-label="Traquear">${ic('go')}</button>`:`<button class="${t[0]===st.tab?'on':''}" onclick="tab('${t[0]}')">${ic(t[0])}${t[1]}</button>`).join('')}
+async function loadRank(){const my=++rq,q=new URLSearchParams({metric:st.met,period:st.per});if(st.amb!=='España')q.set('station',S.find(s=>s.n===st.amb).id);st.rank=null;if(st.tab==='rec')render();try{const r=await api('rank?'+q);if(my!==rq)return;st.rank=r}catch(e){flash(e.message)}render()}
+async function tab(t){st.tab=t;st.toast=0;render();$('#m').scrollTop=0;if(t==='rec')loadRank();else if(t!=='yo'){try{await refresh();render()}catch(e){}}}
+const setF=a=>{st.flt=a;render()},setS=async a=>{st.scope=a;render();if(a!=='Buscar'){try{st.feed=await api(feedQ());render()}catch(e){}}},setP=a=>{st.per=a;loadRank()},setA=a=>{st.amb=a;loadRank()},setM=a=>{st.met=a;loadRank()};
+const resHtml=()=>(st.users||[]).length?st.users.map(u=>`<div class="row">${av(u.alias)}<b style="font-weight:600;cursor:pointer" onclick="profile('${u.id}')">${esc(u.alias)}</b><button class="kudo ${u.following?'on':''}" style="margin-left:auto" onclick="follow('${u.id}',this)">${u.following?'Siguiendo':'Seguir'}</button></div>`).join(''):'<div class="empty">Escribe al menos 2 letras para buscar.</div>';
+function search(v){st.q=v;clearTimeout(qt);qt=setTimeout(async()=>{try{st.users=v.trim().length>1?await api('users?q='+encodeURIComponent(v.trim())):[];$('#res').innerHTML=resHtml()}catch(e){}},250)}
+async function follow(id,b){try{const r=await api('follow',{body:{id}});b.textContent=r.following?'Siguiendo':'Seguir';b.classList.toggle('on',r.following)}catch(e){flash(e.message)}}
+async function profile(id){try{const u=await api('user?id='+id);ov(`<div class="top" style="padding-top:60px"><div style="display:flex;gap:14px;align-items:center"><span class="av" style="width:56px;height:56px;font-size:19px">${ini(u.alias)}</span><div><h1 style="margin:0;font-size:24px">${esc(u.alias)}</h1><small>Puesto ${u.pos||'—'} · ${u.followers} seguidores · racha ${u.streak} sem.</small></div></div></div>
+ ${u.me?'':`<button class="btn ${u.following?'gh':''}" onclick="follow('${u.id}',this)">${u.following?'Siguiendo':'Seguir'}</button>`}
+ <div class="kpis" style="margin-top:14px"><div><b>${fmt(u.totals.desnivel)}</b><small>m desnivel</small></div><div><b>${fmt(u.totals.km)}</b><small>km</small></div><div><b>${u.totals.dias}</b><small>días</small></div></div>
+ <h2>Últimos días</h2>${u.days.length?u.days.map(d=>`<div class="card"><b style="font-weight:600">${esc(SM[d.station].n)}</b> <small>· ${ago(d.ts)}</small><div class="map" style="height:90px">${trk(d.track,300,90)}</div><small>${fmt(d.desnivel)} m · ${d.bajadas} bajadas</small></div>`).join(''):'<div class="empty">Sin días todavía.</div>'}`)}catch(e){flash(e.message)}}
+async function kudo(id,b){try{const r=await api('kudos',{body:{id}});b.classList.toggle('on',r.liked);b.querySelector('span').textContent=r.kudos}catch(e){flash(e.message)}}
+function ov(h){clearInterval(T);if(W!=null){navigator.geolocation.clearWatch(W);W=null}const o=$('.ov');if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov"><button class="x" onclick="ov0()">${ic('x')}</button>${h}</div>`)}
+function ficha(i){const s=SM[i],info=st.stats[i]||{leaders:[],skiers:0};
+ ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">${s.z}</div><h1>${s.n}</h1><small>${info.skiers} ${info.skiers===1?'esquiador':'esquiadores'} esta temporada</small></div>
+ <div id="m3d" class="map" style="height:220px;margin-top:0;display:grid;place-items:center;cursor:pointer" onclick="load3d('${i}')"><div style="text-align:center">${ic('map')}<div style="font-weight:600;margin-top:6px">Explorar en 3D</div><small>Relieve, pistas y remontes reales</small></div></div>
+ <button class="btn" style="margin-top:12px" onclick="traquear('${i}')">Traquear aquí</button>
+ <h2>Líderes de la temporada</h2>${info.leaders.length?info.leaders.map((x,k)=>`<div class="row"><span class="pos">${k+1}</span>${av(x.alias)}<b style="font-weight:600">${esc(x.alias)}</b><span class="val">${fmt(x.v)} m</span></div>`).join(''):'<div class="empty">Nadie ha esquiado aquí todavía. Sé el primero.</div>'}
+ <button class="btn gh" style="margin-top:14px" onclick="st.amb='${s.n}';st.met='desnivel';ov0();tab('rec')">Ver clasificación completa</button>`)}
+function load3d(i){const m=$('#m3d');m.onclick=null;m.style.cssText='height:380px;padding:0;overflow:hidden;position:relative;margin-top:0';m.innerHTML=`<iframe src="/3d/?estacion=${i}" title="Mapa 3D" allow="fullscreen; geolocation" style="width:100%;height:100%;border:0"></iframe><button class="kudo" style="position:absolute;right:8px;top:8px;background:var(--bg)" onclick="big3d(this)">Ampliar</button>`}
+function big3d(b){const m=$('#m3d'),big=m.style.height==='380px';m.style.height=big?'78dvh':'380px';b.textContent=big?'Reducir':'Ampliar'}
+function ov0(){clearInterval(T);if(W!=null){navigator.geolocation.clearWatch(W);W=null}const o=$('.ov');if(o)o.remove()}
+function elegir(){ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Nueva grabación</div><h1>¿Dónde esquías hoy?</h1></div>${st.sim?`<label style="display:flex;gap:10px;align-items:center;color:var(--tx);margin:0 0 14px"><input type="checkbox" id="real" style="width:auto"> Usar el GPS de este dispositivo (experimental)</label>`:''}<div class="grid">${S.map(s=>stCard(s,'traquear')).join('')}</div>`)}
+function traquear(i){const s=SM[i];const rc=$('#real');if(rc)st.real=rc.checked;if(!st.sim)st.real=true;let c=3;ov(`<div class="speed"><small>${s.n}</small><div class="n" id="sp">${c}</div><small>Preparando GPS…</small></div>`);
+ const cd=setInterval(()=>{c--;if(c>0){$('#sp').textContent=c;return}clearInterval(cd);st.real?runReal(s):run(s)},800)}
+// Simulación de GPS: en la app real, estos datos vienen del grabador nativo.
+function run(s){let t=0,v=0,max=0,desc=0,bj=0,sum=0,ns=0,col={v:0,a:0,r:0,n:0},ph='sube',x=0,y=0;const tr=[[0,0]],sp=[];
+ ov(`<div class="speed"><small>${s.n} · Grabando</small><div class="n" id="sp">0</div><small>km/h</small>
+ <div class="kpis" style="margin:36px 0 14px;text-align:left"><div><b id="k1">0</b><small>m desnivel</small></div><div><b id="k2">0</b><small>bajadas</small></div><div><b id="k3">0:00</b><small>tiempo</small></div></div>
+ <div class="card" id="sl" style="text-align:left">En el remonte</div><button class="btn" id="fin">Terminar el día</button></div>`);
+ T=setInterval(()=>{t++;if(ph==='sube'){v=8+Math.random()*3;if(t%5===0){ph='baja';bj++;const c=['v','a','r','n'][Math.floor(Math.random()*4)];col[c]++;$('#sl').textContent='Bajada '+bj+' · pista '+{v:'verde',a:'azul',r:'roja',n:'negra'}[c]}}else{v=Math.min(v+6+Math.random()*9,70+Math.random()*30);desc+=v*.22;sum+=v;ns++;x+=3+Math.random()*5;y+=2+Math.random()*4;if(tr.length<60)tr.push([x,y]);if(t%5===3){ph='sube';$('#sl').textContent='En el remonte'}}max=Math.max(max,v);if(sp.length<400)sp.push(Math.round(v));
+  $('#sp').textContent=Math.round(v);$('#k1').textContent=fmt(desc);$('#k2').textContent=bj;$('#k3').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0')},500);
+ $('#fin').onclick=()=>{clearInterval(T);const d=desc*18+4000,k={v:col.v+4,a:col.a+5,r:col.r+4,n:col.n+1};saveDay(s,{station:s.id,desnivel:d,km:d/190,horas:3.4+Math.random(),bajadas:bj+12,vmax:Math.max(max,62),vmed:ns?sum/ns:30,col:k,track:tr,speed:sp,source:'sim'},$('#fin'))}}
+async function saveDay(s,body,btn){btn.disabled=true;btn.textContent='Guardando…';try{const r=await api('days',{body});await refresh();resumen(s,r)}catch(e){btn.disabled=false;btn.textContent='Reintentar guardado';flash(e.message)}}
+const downs=(a,n)=>a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);
+// GPS real: velocidad, desnivel (altitud) y distancia de los fixes; el color de cada bajada es una ESTIMACIÓN por pendiente media.
+function runReal(s){
+ if(!navigator.geolocation){flash('Este dispositivo no tiene GPS. Se usa la simulación.');return run(s)}
+ let last=null,o=null,desc=0,km=0,max=0,sv=0,nv=0,tSki=0,runs=0,skiing=false,drop=0,len=0;const col={v:0,a:0,r:0,n:0},tr=[],sp=[],t0=Date.now();
+ const endRun=()=>{if(len>150&&drop>30){runs++;const g=drop/len*100;col[g<10?'v':g<18?'a':g<27?'r':'n']++}drop=0;len=0};
+ ov(`<div class="speed"><small>${s.n} · GPS real</small><div class="n" id="sp">0</div><small>km/h</small><div class="kpis" style="margin:36px 0 14px;text-align:left"><div><b id="k1">0</b><small>m desnivel</small></div><div><b id="k2">0</b><small>bajadas</small></div><div><b id="k3">0:00</b><small>tiempo</small></div></div><div class="card" id="sl" style="text-align:left">Esperando señal GPS…</div><button class="btn" id="fin">Terminar el día</button></div>`);
+ T=setInterval(()=>{const t=Math.floor((Date.now()-t0)/1000);$('#k3').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0')},1000);
+ W=navigator.geolocation.watchPosition(p=>{const c=p.coords;if(c.accuracy>40)return;if(!o)o=c;
+  const x=(c.longitude-o.longitude)*111320*Math.cos(o.latitude*Math.PI/180),y=-(c.latitude-o.latitude)*110540;let v=c.speed!=null?c.speed*3.6:0;
+  if(last){const dt=(p.timestamp-last.t)/1000,dd=Math.hypot(x-last.x,y-last.y),dh=c.altitude!=null&&last.alt!=null?c.altitude-last.alt:0;
+   if(!v&&dt>0)v=dd/dt*3.6;
+   if(v>8&&dh<-0.3){skiing=true;desc-=dh;km+=dd/1000;tSki+=dt;drop-=dh;len+=dd;sv+=v;nv++;max=Math.max(max,v)}else if(skiing&&(v<5||dh>0.5)){skiing=false;endRun()}}
+  last={x,y,alt:c.altitude,t:p.timestamp};tr.push([x,y]);sp.push(Math.round(v));
+  $('#sp').textContent=Math.round(v);$('#k1').textContent=fmt(desc);$('#k2').textContent=runs;$('#sl').textContent=skiing?'Esquiando':'En remonte o parado'},
+  e=>{flash('No se pudo usar el GPS: '+e.message);ov0()},{enableHighAccuracy:true,maximumAge:0});
+ $('#fin').onclick=()=>{navigator.geolocation.clearWatch(W);W=null;clearInterval(T);endRun();
+  if(desc<20){flash('No se ha detectado ninguna bajada. No se guarda el día.');return ov0()}
+  const xs=tr.map(p=>p[0]),ys=tr.map(p=>p[1]),mx=Math.min(...xs),my=Math.min(...ys);
+  saveDay(s,{station:s.id,desnivel:desc,km,horas:tSki/3600,bajadas:runs,vmax:max,vmed:nv?sv/nv:0,col,track:downs(tr.map(p=>[p[0]-mx,p[1]-my]),60),speed:downs(sp,400),source:'gps'},$('#fin'))}}
+function resumen(s,r){st.last={s,d:r.day};const d=r.day,tot=d.col.v+d.col.a+d.col.r+d.col.n,C=[['Verdes','--g',d.col.v],['Azules','--b',d.col.a],['Rojas','--r',d.col.r],['Negras','--k',d.col.n]];
+ st.toast=r.before&&r.after<r.before?`Subes del puesto ${r.before} al ${r.after} de España`:0;
+ const sp=d.speed.length>1?(()=>{const m=Math.max(...d.speed,1);return `<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none"><path d="${d.speed.map((v,i)=>(i?'L':'M')+(i/(d.speed.length-1)*300).toFixed(1)+' '+(76-v/m*70).toFixed(1)).join('')}" fill="none" stroke="#8ab4ff" stroke-width="1.6" stroke-linejoin="round"/></svg>`})():'';
+ ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Resumen del día · ${s.n}</div><h1>Día guardado</h1></div>
+ <div class="hero" style="margin-bottom:12px"><small>Desnivel esquiado</small><div class="big" style="margin-top:6px">${fmt(d.desnivel)}<span class="mu" style="font-size:20px"> m</span></div><small style="display:block;margin-top:10px">Puesto ${r.posStation} en ${s.n} · puesto ${r.after} en España</small></div>
+ <div class="kpis"><div><b>${d.km.toFixed(1)}</b><small>km</small></div><div><b>${d.bajadas}</b><small>bajadas</small></div><div><b>${d.vmax.toFixed(0)}</b><small>vel. máx km/h</small></div><div><b>${d.vmed.toFixed(0)}</b><small>vel. media km/h</small></div><div><b>${d.horas.toFixed(1)} h</b><small>esquiando</small></div><div><b>${(d.horas+1.6).toFixed(1)} h</b><small>tiempo total</small></div></div>
+ <h2>Recorrido</h2><div class="map" style="height:150px;margin-top:0">${trk(d.track,300,150)}</div>
+ ${sp?`<h2>Velocidad</h2><div class="card">${sp}</div>`:''}
+ <h2>Bajadas por dificultad</h2><div class="card"><div class="stack">${C.map(c=>`<i style="flex:${c[2]||0};background:var(${c[1]})"></i>`).join('')}</div><div class="leg">${C.map(c=>`<span style="--c:var(${c[1]})">${c[0]} ${c[2]}</span>`).join('')}</div></div>
+ <button class="btn" onclick="shareDay()">Compartir día</button>
+ <button class="btn gh" onclick="st.amb='España';st.met='desnivel';$('.ov').remove();tab('rec')">Ver mi posición en el ranking</button>`);
+ render()}
+async function shareDay(){const{s,d}=st.last,c=document.createElement('canvas');c.width=1080;c.height=1920;const g=c.getContext('2d');
+ g.fillStyle='#0b0c0f';g.fillRect(0,0,1080,1920);g.strokeStyle='rgba(255,255,255,.06)';g.lineWidth=2;for(let i=1;i<26;i++){g.beginPath();g.ellipse(980,160,i*55,i*38,0,0,7);g.stroke()}
+ g.fillStyle='#f4f5f7';g.font='600 34px system-ui';g.fillText('P I S T E A',80,120);g.fillStyle='#8a909c';g.font='500 40px system-ui';g.fillText(s.n.toUpperCase(),80,300);
+ g.fillStyle='#f4f5f7';g.font='700 230px system-ui';g.fillText(fmt(d.desnivel),70,520);g.fillStyle='#8a909c';g.font='500 54px system-ui';g.fillText('metros de desnivel esquiado',80,600);
+ if(d.track.length>1){const mx=Math.max(...d.track.map(p=>p[0]))||1,my=Math.max(...d.track.map(p=>p[1]))||1;g.strokeStyle='#f4f5f7';g.lineWidth=7;g.lineJoin='round';g.beginPath();d.track.forEach((p,i)=>{const X=100+p[0]/mx*880,Y=720+p[1]/my*520;i?g.lineTo(X,Y):g.moveTo(X,Y)});g.stroke()}
+ const K=[[d.km.toFixed(1),'km'],[d.bajadas,'bajadas'],[d.vmax.toFixed(0),'km/h máx'],[d.horas.toFixed(1)+' h','esquiando']];K.forEach((k,i)=>{const X=80+(i%2)*470,Y=1420+Math.floor(i/2)*190;g.fillStyle='#f4f5f7';g.font='700 84px system-ui';g.fillText(k[0],X,Y);g.fillStyle='#8a909c';g.font='500 38px system-ui';g.fillText(k[1],X,Y+56)});
+ g.fillStyle='#8a909c';g.font='500 34px system-ui';g.fillText(st.user.alias+' · '+new Date(d.ts).toLocaleDateString('es-ES'),80,1840);
+ c.toBlob(async b=>{const f=new File([b],'pistea_dia.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:'Mi día en '+s.n});return}catch(e){if(e.name==='AbortError')return}}const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='pistea_dia.png';a.click()})}
+fetch('/api/config').then(r=>r.json()).then(c=>{st.sim=!!c.sim}).catch(()=>{});
+const rt=new URLSearchParams(location.search).get('reset');
+if(rt&&/^[a-f0-9]{64}$/.test(rt)){st.resetToken=rt;st.mode='reset';st.token=null;history.replaceState(null,'','/');render()}
+else if(st.token)boot();else render();
+</script></body></html>

@@ -1,0 +1,6 @@
+db.json
+db.json.*
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env

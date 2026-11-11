@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Estaciones de esquí en 3D</title>
+  <!-- Icono neutro: el de la estación lo pone marca.js -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M1 14 6 4l3 5 2-3 4 8z' fill='%231f3f6e'/%3E%3C/svg%3E" />
+  <script>
+    // Red de seguridad: si la vista no llega a arrancar (sin WebGL, un fichero que no llega, un error al montarla) o se
+    // detiene después, la pantalla de carga vuelve con el motivo, una imagen fija de la estación, un botón para
+    // reintentar y el enlace al plano de pistas. Va aquí, y no en main.js, para que sirva también cuando lo que no llega
+    // o no se entiende es el propio main.js; por eso no usa nada que un navegador antiguo no conozca
+    window.__fail = function (title, text) {
+      var box = document.getElementById('loading');
+      if (!box || box.className.indexOf('failed') >= 0) return;   // el primer motivo es el que vale
+      box.className = 'failed';
+      document.getElementById('fail-title').textContent = title || 'No se ha podido cargar la vista en 3D';
+      document.getElementById('fail-text').textContent = text || 'Puede ser la conexión, o que este navegador no admita la vista. Vuelve a intentarlo o mira el plano de pistas.';
+      document.getElementById('fail').hidden = false;
+    };
+    // Hasta el primer fotograma, cualquier error sin atender es no haber arrancado (los de una imagen suelta no cuentan)
+    addEventListener('error', function (e) { if (!window.__ready && (e.target === window || e.target.tagName === 'SCRIPT')) window.__fail(); }, true);
+    addEventListener('unhandledrejection', function () { if (!window.__ready) window.__fail(); });
+  </script>
+  <script type="module" crossorigin src="./assets/index-ntLIhrXN.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/preload-helper-Ct5FWWRu.js">
+  <link rel="modulepreload" crossorigin href="./assets/_virtual_ficha-Ok7wwQLk.js">
+</head>
+<body>
+  <div id="loading" role="status">
+    <p class="brand"></p><!-- la firma de la estación: la pone marca.js -->
+    <!-- El perfil de la sierra de la estación (su ficha): se va trazando según llegan los datos -->
+    <svg class="ridge" viewBox="0 -24 600 104" aria-hidden="true">
+      <defs>
+        <linearGradient id="ladera" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></linearGradient>
+        <linearGradient id="trazo" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="600" y2="0"></linearGradient>
+        <path id="cuerda" pathLength="1" d="" />
+      </defs>
+      <path class="snow" d="" />
+      <use href="#cuerda" class="track" />
+      <use href="#cuerda" class="drawn" />
+    </svg>
+    <p class="status"><span id="msg">Cargando la montaña</span><span id="pct">0 %</span></p>
+    <p class="tip"><span class="fine">Dentro, arrastra para mover el mapa y usa la rueda para acercarte. Para girar, los botones de abajo a la derecha o el clic derecho.</span><span class="coarse">Dentro, arrastra con un dedo para mover el mapa y pellizca con dos para acercarte y girar.</span></p>
+    <div id="fail" role="alert" hidden>
+      <div class="vista" role="img" aria-label="La estación en la vista en 3D, con las pistas en su color"></div>
+      <p id="fail-title"></p>
+      <p id="fail-text"></p>
+      <p class="acts"><button id="retry" onclick="location.reload()">Volver a intentarlo</button><a href="#" target="_blank" rel="noopener">Ver el plano de pistas</a></p>
+    </div>
+  </div>
+
+  <aside id="panel" aria-label="Pistas">
+    <header>
+      <h1 class="brand"></h1>
+      <button id="fold" class="quiet" aria-expanded="true" aria-controls="sheet">Ocultar</button>
+    </header>
+    <div id="sheet">
+      <section id="browse" data-tab="pistas" aria-label="Lista de pistas y remontes">
+        <a id="parte-link" href="#" target="_blank" rel="noopener">Parte de hoy</a>
+        <details id="parte" hidden>
+          <summary id="parte-sum"></summary>
+          <div id="parte-body"></div>
+        </details>
+        <div id="tabs" role="group" aria-label="Qué quieres ver">
+          <button data-tab="pistas" aria-pressed="true" title="Pistas y remontes">Pistas</button>
+          <button data-tab="inst" aria-pressed="false">Instalaciones</button>
+          <button data-tab="cams" aria-pressed="false">Webcams</button>
+        </div>
+        <p class="lead pistas">Elige una pista para verla entera y recorrerla con un dron, o un remonte y sube en él.</p>
+        <label class="vh" for="q">Buscar una pista o un remonte por su nombre</label>
+        <input id="q" class="pistas" type="search" placeholder="Buscar por nombre" autocomplete="off" />
+        <div id="filters" class="pistas" role="group" aria-label="Filtrar por dificultad"></div>
+        <div id="list" class="pistas"></div>
+        <p id="empty" class="pistas" hidden></p>
+        <div id="inst"></div>
+        <div id="cams"></div>
+      </section>
+      <section id="detail" aria-label="Ficha de la pista o del remonte" hidden></section>
+    </div>
+  </aside>
+
+  <!-- Donde hay poco sitio (un hueco estrecho, un móvil) las opciones se recogen tras este botón -->
+  <button id="tools-btn" class="quiet" aria-expanded="false" aria-controls="tools">Opciones</button>
+  <div id="tools" role="group" aria-label="Opciones de la vista">
+    <label class="switch"><input id="map" type="checkbox" checked /><i aria-hidden="true"></i><span>Colores y nombres de pistas</span></label>
+    <label class="snow"><span>Nieve</span><input id="snow" type="range" min="10" max="150" step="5" value="100" /><output id="snow-out" for="snow">100 %</output></label>
+    <button id="home-btn" class="quiet" title="Volver a la vista de toda la estación (tecla 1)">Vista general</button>
+    <button id="goto-btn" class="quiet" aria-expanded="false" aria-controls="goto">Ir a un lugar</button>
+    <button id="help-btn" class="quiet" aria-expanded="false" aria-controls="help">Cómo moverse</button>
+  </div>
+  <div id="goto" class="pop" role="group" aria-label="Lugares de la estación" hidden></div>
+  <div id="help" class="pop" role="region" aria-label="Cómo moverse por la vista" hidden>
+    <dl class="coarse">
+      <dt>Un dedo</dt><dd>Mover el mapa</dd>
+      <dt>Pellizcar con dos</dt><dd>Acercarse y alejarse</dd>
+      <dt>Girar dos dedos</dt><dd>Girar la vista</dd>
+      <dt>Subir o bajar dos dedos</dt><dd>Inclinar la vista</dd>
+      <dt>Doble toque</dt><dd>Acercarse a ese punto</dd>
+      <dt>Tocar una pista, un remonte o un nombre</dt><dd>Abrir su ficha</dd>
+    </dl>
+    <dl class="fine">
+      <dt>Arrastrar</dt><dd>Mover el mapa</dd>
+      <dt>Rueda, dos dedos o pellizcar en el panel táctil</dt><dd>Acercarse y alejarse</dd>
+      <dt>Clic derecho, o Ctrl, y arrastrar</dt><dd>Girar e inclinar la vista</dd>
+      <dt>Botones de abajo a la derecha</dt><dd>Girar, orientar como el plano, ver desde arriba, acercar</dd>
+      <dt>Doble clic</dt><dd>Acercarse a ese punto</dd>
+      <dt>Pulsar una pista o un remonte</dt><dd>Abrir su ficha</dd>
+      <dt>Flechas ← →</dt><dd>Girar</dd>
+      <dt>W A S D, ↑ ↓ · Q y E</dt><dd>Volar · bajar y subir</dd>
+      <dt>Teclas 1 a 0</dt><dd>Ir a un lugar</dd>
+      <dt>Esc</dt><dd>Cerrar lo abierto</dd>
+    </dl>
+  </div>
+
+  <!-- La imagen real de la webcam elegida, sobre el 3D visto desde el mismo sitio -->
+  <figure id="cam" hidden>
+    <div class="shot"><img id="cam-img" alt="" /><p id="cam-msg" role="status"></p></div>
+    <figcaption>
+      <span><b id="cam-name"></b> Imagen real de la webcam</span>
+      <button id="cam-reload" class="quiet">Actualizar</button>
+      <button id="cam-size" class="quiet" aria-pressed="false">Ampliar</button>
+    </figcaption>
+  </figure>
+
+  <!-- Botones de la vista, como en cualquier mapa: girar, orientar como el plano, ver desde arriba o en 3D, acercar -->
+  <div id="nav" role="group" aria-label="Mover la vista">
+    <div class="turn">
+      <button id="nav-left" title="Girar a la izquierda" aria-label="Girar a la izquierda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12a7 7 0 1 0 2.2-5.1M5 4v4h4" /></svg></button>
+      <button id="nav-north" title="Orientar como el plano de pistas" aria-label="Orientar como el plano de pistas"><svg viewBox="0 0 24 24" aria-hidden="true"><g id="needle"><path class="n" d="M12 3l3.5 9h-7z" /><path class="s" d="M12 21l3.5-9h-7z" /></g></svg></button>
+      <button id="nav-right" title="Girar a la derecha" aria-label="Girar a la derecha"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.2-5.1M19 4v4h-4" /></svg></button>
+    </div>
+    <button id="nav-tilt" title="Ver desde arriba" aria-label="Ver desde arriba">2D</button>
+    <div class="zoom">
+      <button id="nav-in" title="Acercar" aria-label="Acercar">+</button>
+      <button id="nav-out" title="Alejar" aria-label="Alejar">−</button>
+    </div>
+  </div>
+
+  <!-- El detalle (edificios, pinos y texturas completas) sigue llegando tras la primera imagen: se dice, y si no llega, también -->
+  <p id="more" hidden><span id="more-msg"></span><button id="more-retry" class="quiet" hidden>Reintentar</button></p>
+  <!-- Una pista de cómo manejarlo, una sola vez: se va al primer gesto o a los pocos segundos -->
+  <p id="hint" role="status" hidden>
+    <span class="fine">Arrastra para mover el mapa y usa la rueda para acercarte. Para girar, los botones de abajo a la derecha o el clic derecho. Pulsa una pista para verla entera.</span>
+    <span class="coarse">Arrastra para mover el mapa, pellizca para acercarte y girar, y toca una pista para verla entera.</span>
+  </p>
+  <!-- La pista o el remonte que hay bajo el ratón: nombre, tipo y longitud -->
+  <div id="tip" aria-hidden="true" hidden></div>
+  <p id="attr">Relieve y ortofoto © IGN/CNIG (CC BY 4.0). Pistas y remontes © OpenStreetMap (ODbL).</p>
+  <p id="live" class="vh" aria-live="polite"></p>
+</body>
+</html>

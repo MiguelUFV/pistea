@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ejemplo: la vista 3D dentro de otra página</title>
+  <style>
+    body { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #132238; background: #eef1f4; }
+    main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+    /* Lo único que necesita la página que aloja la vista: un marco con anchura y altura */
+    .vista-3d { display: block; width: 100%; height: min(720px, 80vh); border: 0; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Plano de pistas</h1>
+    <p>Esta página hace de web de la estación. La vista se inserta con una sola etiqueta:</p>
+    <iframe class="vista-3d" name="vista-3d" src="./index.html" title="Pistas de Cerler en 3D" loading="lazy" allowfullscreen></iframe>
+    <p>Cualquier enlace de la web puede abrirla ya en una pista, un remonte, un servicio o una webcam. Basta con añadir a la dirección <code>?pista=</code>, <code>?remonte=</code>, <code>?lugar=</code> o <code>?webcam=</code> y el nombre:</p>
+    <ul>
+      <li><a href="./index.html?pista=canal-amplla" target="vista-3d">Pista Canal Amplla</a></li>
+      <li><a href="./index.html?remonte=gallinero" target="vista-3d">Telesilla Gallinero</a></li>
+      <li><a href="./index.html?remonte=telecabina-benasque-cerler" target="vista-3d">Telecabina Benasque–Cerler</a></li>
+    </ul>
+    <p>El resto de la página sigue aquí debajo, con su propio desplazamiento.</p>
+  </main>
+</body>
+</html>
