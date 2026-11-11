@@ -27,7 +27,7 @@ nav .go{flex:none;width:54px;height:54px;border-radius:50%;background:var(--tx);
 .pills button.on{background:var(--tx);color:#000;border-color:var(--tx)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .st{aspect-ratio:1/1.05;border-radius:14px;border:1px solid var(--ln);padding:14px;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;position:relative;overflow:hidden;background:var(--s1)}
-.st::before{content:"";position:absolute;inset:0;background:repeating-radial-gradient(ellipse at var(--x) var(--y),transparent 0 9px,#ffffff0d 9px 10px)}
+.st{background-size:cover;background-position:center;background-color:var(--s2)}.st::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,#0b0c0f99 0,#0b0c0f00 38%,#0b0c0fe6 100%)}
 .st>*{position:relative}.st b{font-size:15px;font-weight:600}
 .st .live{position:absolute;top:12px;left:14px;font-size:11px;color:var(--mu);display:flex;align-items:center;gap:6px}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--mu);display:inline-block}.dot.on{background:var(--g)}
@@ -90,7 +90,7 @@ async function api(path,opt={}){
  if(!r.ok)throw new Error(j.error||'Error del servidor');return j}
 const seg=(arr,cur,fn)=>`<div class="seg">${arr.map(a=>`<button class="${a===cur?'on':''}" onclick="${fn}('${a}')">${a[0].toUpperCase()+a.slice(1)}</button>`).join('')}</div>`;
 const pills=(arr,cur,fn)=>`<div class="pills">${arr.map(a=>`<button class="${a===cur?'on':''}" onclick="${fn}('${a}')">${a}</button>`).join('')}</div>`;
-const stCard=(s,fn='ficha')=>{const k=(st.stats[s.id]||{}).skiers||0;return `<div class="st" style="--x:${s.x};--y:${s.y}" onclick="${fn}('${s.id}')"><span class="live"><i class="dot ${k?'on':''}"></i>${k} ${k===1?'esquiador':'esquiadores'}</span><b>${s.n}</b><small>${s.z}</small></div>`};
+const stCard=(s,fn='ficha')=>{const k=(st.stats[s.id]||{}).skiers||0;return `<div class="st" style="background-image:url(/img/${s.id}.webp)" onclick="${fn}('${s.id}')"><span class="live"><i class="dot ${k?'on':''}"></i>${k} ${k===1?'esquiador':'esquiadores'}</span><b>${s.n}</b><small>${s.z}</small></div>`};
 const trk=(t,w=300,h=120)=>{if(!t||t.length<2)return '';const xs=t.map(p=>p[0]),ys=t.map(p=>p[1]),mx=Math.max(...xs)||1,my=Math.max(...ys)||1,d=t.map((p,i)=>(i?'L':'M')+(12+p[0]/mx*(w-24)).toFixed(1)+' '+(12+p[1]/my*(h-24)).toFixed(1)).join('');return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><path d="${d}" fill="none" stroke="#f4f5f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`};
 
 // ---------- sesión ----------
@@ -160,7 +160,7 @@ async function profile(id){try{const u=await api('user?id='+id);ov(`<div class="
 async function kudo(id,b){try{const r=await api('kudos',{body:{id}});b.classList.toggle('on',r.liked);b.querySelector('span').textContent=r.kudos}catch(e){flash(e.message)}}
 function ov(h){clearInterval(T);if(W!=null){navigator.geolocation.clearWatch(W);W=null}const o=$('.ov');if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov"><button class="x" onclick="ov0()">${ic('x')}</button>${h}</div>`)}
 function ficha(i){const s=SM[i],info=st.stats[i]||{leaders:[],skiers:0};
- ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">${s.z}</div><h1>${s.n}</h1><small>${info.skiers} ${info.skiers===1?'esquiador':'esquiadores'} esta temporada</small></div>
+ ov(`<div class="top" style="margin:0 -20px;padding:70px 20px 20px;background:linear-gradient(180deg,#0b0c0f66,#0b0c0f 96%),url(/img/${i}.webp) center/cover"><div class="eyebrow" style="color:#c9ced8">${s.z}</div><h1>${s.n}</h1><small style="color:#c9ced8">${info.skiers} ${info.skiers===1?'esquiador':'esquiadores'} esta temporada</small></div>
  <div id="m3d" class="map" style="height:220px;margin-top:0;display:grid;place-items:center;cursor:pointer" onclick="load3d('${i}')"><div style="text-align:center">${ic('map')}<div style="font-weight:600;margin-top:6px">Explorar en 3D</div><small>Relieve, pistas y remontes reales</small></div></div>
  <button class="btn" style="margin-top:12px" onclick="traquear('${i}')">Traquear aquí</button>
  <h2>Líderes de la temporada</h2>${info.leaders.length?info.leaders.map((x,k)=>`<div class="row"><span class="pos">${k+1}</span>${av(x.alias)}<b style="font-weight:600">${esc(x.alias)}</b><span class="val">${fmt(x.v)} m</span></div>`).join(''):'<div class="empty">Nadie ha esquiado aquí todavía. Sé el primero.</div>'}

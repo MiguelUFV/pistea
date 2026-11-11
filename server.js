@@ -213,6 +213,7 @@ async function handler(req, res) {
       const b = req.method === 'POST' || req.method === 'DELETE' ? await readBody(req) : {};
       return await r({ req, res, u, q: url.searchParams, b });
     }
+    if (url.pathname.startsWith('/img/')) return serveFile(req, res, path.join(__dirname, 'public', 'img'), url.pathname.slice(4));
     if (url.pathname === '/3d') { res.writeHead(301, { Location: '/3d/' + url.search }); return res.end(); }
     if (url.pathname.startsWith('/3d/')) return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
     if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#0b0c0f', theme_color: '#0b0c0f', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
