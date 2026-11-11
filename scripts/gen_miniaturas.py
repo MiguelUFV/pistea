@@ -13,7 +13,8 @@ COL = {'novice': (53, 194, 138), 'easy': (77, 141, 255), 'intermediate': (239, 8
 
 DATOS = {}
 
-def hacer(est):
+def hacer(est, fondo=None):
+    """fondo(caja, w, h) -> (imagen RGB, fecha) para usar otra imagen que la ortofoto de verano (ver gen_invierno.py)."""
     d = RAIZ / 'mapas' / 'estaciones' / est / 'data'
     f = json.loads((d / 'features.json').read_text(encoding='utf-8'))
     meta = json.loads((d / 'meta.json').read_text(encoding='utf-8'))
@@ -29,25 +30,31 @@ def hacer(est):
     cx = min(max(cx, x0 + ancho / 2), x1 - ancho / 2); cz = min(max(cz, z0 + alto / 2), z1 - alto / 2)   # la caja se queda dentro de la imagen
     caja = (cx - ancho / 2, cz - alto / 2, cx + ancho / 2, cz + alto / 2)
     c = [(caja[0] - x0) * sx, (caja[1] - z0) * sz, (caja[2] - x0) * sx, (caja[3] - z0) * sz]
-    base = img.crop(tuple(int(round(v)) for v in c)).resize((W * SS, H * SS), Image.LANCZOS)
-    # tratamiento común: niveles automáticos (iguala teselas y estaciones), menos color y un velo azul frío de invierno
-    base = ImageOps.autocontrast(base, cutoff=1.5)
-    base = ImageEnhance.Color(base).enhance(.5)
-    base = Image.blend(base, Image.new('RGB', base.size, (34, 58, 96)), .26)
-    base = ImageEnhance.Brightness(base).enhance(.8)
+    fecha = None
+    if fondo:
+        base, fecha = fondo(caja, W * SS, H * SS)
+        base = ImageEnhance.Brightness(base).enhance(.82)
+    else:
+        base = img.crop(tuple(int(round(v)) for v in c)).resize((W * SS, H * SS), Image.LANCZOS)
+        # tratamiento común: niveles automáticos (iguala teselas y estaciones), menos color y un velo azul frío de invierno
+        base = ImageOps.autocontrast(base, cutoff=1.5)
+        base = ImageEnhance.Color(base).enhance(.5)
+        base = Image.blend(base, Image.new('RGB', base.size, (34, 58, 96)), .26)
+        base = ImageEnhance.Brightness(base).enhance(.8)
     cap = Image.new('RGBA', base.size, (0, 0, 0, 0)); dr = ImageDraw.Draw(cap)
     k = W * SS / ancho
     P = lambda pts: [((x - caja[0]) * k, (z - caja[1]) * k) for x, z in pts]
     for l in f['lifts']:
-        if len(l['pts']) > 1: dr.line(P(l['pts']), fill=(255, 255, 255, 190), width=SS)
+        if len(l['pts']) > 1: dr.line(P(l['pts']), fill=(25, 25, 30, 210) if fondo else (255, 255, 255, 190), width=SS)
     for l in sorted(f['pistes'], key=lambda p: p.get('difficulty') in ('advanced', 'expert')):
         if len(l['pts']) < 2: continue
         q = P(l['pts']); col = COL.get(l.get('difficulty'), (230, 230, 235))
-        dr.line(q, fill=(255, 255, 255, 235), width=int(3.8 * SS), joint='curve')
+        dr.line(q, fill=(0, 0, 0, 150) if fondo else (255, 255, 255, 235), width=int(3.8 * SS), joint='curve')
         dr.line(q, fill=col + (255,), width=int(2.2 * SS), joint='curve')
     out = Image.alpha_composite(base.convert('RGBA'), cap).convert('RGB').resize((W, H), Image.LANCZOS)
     nombres = lambda L: len({l['name'] for l in L if l.get('name')}) or len(L)   # OSM parte las pistas en tramos: se cuentan nombres distintos
     DATOS[est] = {'pistas': nombres(f['pistes']), 'remontes': nombres(f['lifts'])}
+    if fecha: DATOS[est]['fecha'] = fecha
     out.save(SAL / f'{est}.webp', quality=76, method=6)
     return (SAL / f'{est}.webp').stat().st_size // 1024
 
