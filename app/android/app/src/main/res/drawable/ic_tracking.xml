@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono del aviso de «grabando»: dos montañas con el punto de dónde se está, en blanco sobre transparente, como pide
+     Android para los iconos de notificación -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,20 L9,8 L12.5,13.5 L15,10 L22,20 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,2 C17.2,2 19,3.8 19,6 C19,8.6 15,12 15,12 C15,12 11,8.6 11,6 C11,3.8 12.8,2 15,2 Z M15,4.5 C14.2,4.5 13.5,5.2 13.5,6 C13.5,6.8 14.2,7.5 15,7.5 C15.8,7.5 16.5,6.8 16.5,6 C16.5,5.2 15.8,4.5 15,4.5 Z" />
+</vector>

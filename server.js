@@ -24,12 +24,13 @@ CREATE TABLE IF NOT EXISTS days(id TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCE
 CREATE TABLE IF NOT EXISTS kudos(day TEXT REFERENCES days(id) ON DELETE CASCADE, uid TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(day, uid));
 CREATE TABLE IF NOT EXISTS follows(a TEXT REFERENCES users(id) ON DELETE CASCADE, b TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(a, b));
 CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts); CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts); CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts);`);
+try { db.exec('ALTER TABLE days ADD COLUMN total REAL'); } catch {}   // tiempo total del día (h); BD antiguas
 const cache = new Map(), P = sql => cache.get(sql) || (cache.set(sql, db.prepare(sql)), cache.get(sql));
 const tx = f => { db.exec('BEGIN'); try { const r = f(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; } };
 const J = s => { try { return JSON.parse(s); } catch { return []; } };
 
 function track(n = 14) { let x = 0, y = 0; const t = []; for (let i = 0; i < n; i++) { t.push([+x.toFixed(1), +y.toFixed(1)]); x += 4 + Math.random() * 8; y += 3 + Math.random() * 7 + (i % 2 ? 6 : -3); } return t; }
-function insertDay(d) { P('INSERT INTO days(id,uid,station,ts,desnivel,km,horas,bajadas,vmax,vmed,col,track,speed,src) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(d.id, d.uid, d.station, d.ts, d.desnivel, d.km, d.horas, d.bajadas, d.vmax, d.vmed, JSON.stringify(d.col), JSON.stringify(d.track), JSON.stringify(d.speed || []), d.src); }
+function insertDay(d) { P('INSERT INTO days(id,uid,station,ts,desnivel,km,horas,bajadas,vmax,vmed,col,track,speed,src,total) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(d.id, d.uid, d.station, d.ts, d.desnivel, d.km, d.horas, d.bajadas, d.vmax, d.vmed, JSON.stringify(d.col), JSON.stringify(d.track), JSON.stringify(d.speed || []), d.src, d.total || null); }
 function seedDemo() {
   const names = ['Marta Ruiz','Javi Soler','Lucía Ortega','Dani Vega','Carlos Mena','Ainhoa Etxe','Pablo Rey','Irene Valle','Sergio Lara','Noa Pons','Hugo Alba','Clara Núñez','Rubén Gil','Elena Sanz','Iván Mora','Paula Ríos','Mario Díez','Sofía Cano','Tomás Ibáñez','Nerea Lozano'];
   tx(() => names.forEach((alias, i) => {
@@ -158,7 +159,7 @@ const routes = {
     const c = b.col && typeof b.col === 'object' ? b.col : {}, src = b.source === 'sim' ? 'sim' : 'gps';
     if (src === 'sim' && !ALLOW_SIM) return send(res, 403, { error: 'La simulación está desactivada en producción.' });
     if (!SID.has(b.station)) return send(res, 400, { error: 'Estación no válida.' });
-    const d = { id: rid(), uid: u.id, station: b.station, ts: Date.now(), desnivel: num(b.desnivel, 40000), km: num(b.km, 300), horas: num(b.horas, 14), bajadas: Math.round(num(b.bajadas, 200)), vmax: num(b.vmax, 140), vmed: num(b.vmed, 100), src,
+    const d = { id: rid(), uid: u.id, station: b.station, ts: Date.now(), desnivel: num(b.desnivel, 40000), km: num(b.km, 300), horas: num(b.horas, 14), bajadas: Math.round(num(b.bajadas, 200)), vmax: num(b.vmax, 140), vmed: num(b.vmed, 100), total: num(b.total, 24), src,
       col: { v: num(c.v, 200) | 0, a: num(c.a, 200) | 0, r: num(c.r, 200) | 0, n: num(c.n, 200) | 0 },
       track: (Array.isArray(b.track) ? b.track : []).slice(0, 60).map(p => Array.isArray(p) ? [num(p[0], 1e5), num(p[1], 1e5)] : [0, 0]), speed: (Array.isArray(b.speed) ? b.speed : []).slice(0, 400).map(v => num(v, 140)) };
     if (d.bajadas > 0 && d.desnivel / d.bajadas > 1500) return send(res, 400, { error: 'Datos incoherentes: demasiado desnivel por bajada.' });

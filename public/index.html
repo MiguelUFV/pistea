@@ -81,7 +81,7 @@ const ini=n=>esc(n.split(' ').map(w=>w[0]).slice(0,2).join(''));
 const av=(n,me)=>`<span class="av">${ini(n)}</span>`;
 const ago=t=>{const h=(Date.now()-t)/36e5;return h<1?'Hace minutos':h<24?`Hace ${Math.floor(h)} h`:h<48?'Ayer':`Hace ${Math.floor(h/24)} días`};
 let st={tab:'est',met:'desnivel',amb:'España',per:'temporada',flt:'Todas',scope:'Amigos',toast:0,user:null,token:localStorage.getItem('pistea_t'),me:null,stats:[],feed:[],rank:null,mode:'login',err:''};
-let T,W=null,qt,rq=0,SI={};st.sim=true;fetch('/img/estaciones.json').then(r=>r.json()).then(j=>{SI=j;if(st.me)render()}).catch(()=>{});
+let T,W=null,qt,rq=0,curSave=null,SI={};st.sim=true;fetch('/img/estaciones.json').then(r=>r.json()).then(j=>{SI=j;if(st.me)render()}).catch(()=>{});
 const feedQ=()=>'feed?scope='+(st.scope==='Amigos'?'amigos':'todos');
 async function api(path,opt={}){
  let r;try{r=await fetch('/api/'+path,{method:opt.method||(opt.body?'POST':'GET'),headers:{'Content-Type':'application/json',...(st.token?{Authorization:'Bearer '+st.token}:{})},body:opt.body?JSON.stringify(opt.body):undefined})}catch(e){throw new Error('Sin conexión con el servidor. Revisa tu internet.')}
@@ -110,13 +110,13 @@ async function submitAuth(e){e.preventDefault();const m=st.mode,v=id=>$('#'+id)?
 function logout(silent){if(!silent)api('logout',{method:'POST',body:{}}).catch(()=>{});localStorage.removeItem('pistea_t');st.token=null;st.user=null;st.me=null;st.mode='login';render()}
 async function delAccount(){const pw=prompt('Se borrarán tu cuenta y todos tus días. Escribe tu contraseña para confirmar:');if(!pw)return;try{await api('me',{method:'DELETE',body:{password:pw}});logout(true)}catch(e){flash(e.message)}}
 function flash(t){const d=document.createElement('div');d.className='toast';d.style.cssText='position:absolute;left:20px;right:20px;top:14px;z-index:20';d.textContent=t;$('#app').appendChild(d);setTimeout(()=>d.remove(),3500)}
-async function boot(){try{await refresh();render()}catch(x){st.err=st.err||x.message;st.me=null;render()}}
+async function boot(){try{await refresh();st.rec=recLoad();if(NAT&&st.rec&&st.rec.native)NAT.status().then(x=>{st.recRun=!!x.recording;render()}).catch(()=>{});render()}catch(x){st.err=st.err||x.message;st.me=null;render()}}
 async function refresh(){const[m,s,f]=await Promise.all([api('me'),api('stations'),api(feedQ())]);st.me=m;st.user=m.user;st.stats=s;st.feed=f}
 
 // ---------- vistas ----------
 const V={
 est(){const zs=['Todas',...new Set(S.map(s=>s.z))],l=S.filter(s=>st.flt==='Todas'||s.z===st.flt),t=st.me.totals;
- return `<div class="top"><div class="eyebrow">Hola, ${esc(st.user.alias.split(' ')[0])}</div><h1>Elige tu estación</h1></div>
+ return `<div class="top"><div class="eyebrow">Hola, ${esc(st.user.alias.split(' ')[0])}</div><h1>Elige tu estación</h1></div>${recBanner()}
  <div class="hero" style="margin-bottom:18px"><div class="eyebrow">Tu temporada</div><div class="big" style="margin-top:10px">${fmt(t.desnivel)}<span class="mu" style="font-size:18px;font-weight:500"> m</span></div><small style="display:block;margin-top:10px">${t.dias} ${t.dias===1?'día':'días'} · ${fmt(t.km)} km · ${st.me.pos?'puesto '+st.me.pos+' en España':'aún sin clasificar'}</small></div>
  <div class="grid" style="margin-bottom:18px"><div class="card" style="margin:0"><div class="eyebrow">Liga semanal</div><div style="font-size:22px;font-weight:700;margin-top:6px">${st.me.league.tier||'Sin clasificar'}</div><small>${st.me.league.tier?`Puesto ${st.me.league.pos} de ${st.me.league.total} esta semana`:'Esquía para entrar'}</small></div><div class="card" style="margin:0"><div class="eyebrow">Racha</div><div style="font-size:22px;font-weight:700;margin-top:6px">${st.me.streak} ${st.me.streak===1?'semana':'semanas'}</div><small>${st.me.streak?'Esquía esta semana para mantenerla':'Empieza tu racha'}</small></div></div>
  ${pills(zs,st.flt,'setF')}<div class="grid">${l.map(s=>stCard(s)).join('')}</div>`},
@@ -158,7 +158,7 @@ async function profile(id){try{const u=await api('user?id='+id);ov(`<div class="
  <div class="kpis" style="margin-top:14px"><div><b>${fmt(u.totals.desnivel)}</b><small>m desnivel</small></div><div><b>${fmt(u.totals.km)}</b><small>km</small></div><div><b>${u.totals.dias}</b><small>días</small></div></div>
  <h2>Últimos días</h2>${u.days.length?u.days.map(d=>`<div class="card"><b style="font-weight:600">${esc(SM[d.station].n)}</b> <small>· ${ago(d.ts)}</small><div class="map" style="height:90px">${trk(d.track,300,90)}</div><small>${fmt(d.desnivel)} m · ${d.bajadas} bajadas</small></div>`).join(''):'<div class="empty">Sin días todavía.</div>'}`)}catch(e){flash(e.message)}}
 async function kudo(id,b){try{const r=await api('kudos',{body:{id}});b.classList.toggle('on',r.liked);b.querySelector('span').textContent=r.kudos}catch(e){flash(e.message)}}
-function ov(h){clearInterval(T);if(W!=null){navigator.geolocation.clearWatch(W);W=null}const o=$('.ov');if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov"><button class="x" onclick="ov0()">${ic('x')}</button>${h}</div>`)}
+function ov(h){clearInterval(T);stopW();const o=$('.ov');if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov"><button class="x" onclick="ov0()">${ic('x')}</button>${h}</div>`)}
 function ficha(i){const s=SM[i],info=st.stats[i]||{leaders:[],skiers:0};
  ov(`<div class="top" style="margin:0 -20px;padding:70px 20px 20px;background:linear-gradient(180deg,#0b0c0f66,#0b0c0f 96%),url(/img/${i}.webp) center/cover"><div class="eyebrow" style="color:#c9ced8">${s.z}</div><h1>${s.n}</h1></div>
  ${SI[i]?`<div class="kpis" style="margin:14px 0"><div><b>${SI[i].pistas}</b><small>pistas</small></div><div><b>${SI[i].remontes}</b><small>remontes</small></div><div><b>${info.skiers}</b><small>esquiadores</small></div></div>`:''}
@@ -168,9 +168,9 @@ function ficha(i){const s=SM[i],info=st.stats[i]||{leaders:[],skiers:0};
  <button class="btn gh" style="margin-top:14px" onclick="st.amb='${s.n}';st.met='desnivel';ov0();tab('rec')">Ver clasificación completa</button>`)}
 function load3d(i){const m=$('#m3d');m.onclick=null;m.style.cssText='height:380px;padding:0;overflow:hidden;position:relative;margin-top:0';m.innerHTML=`<iframe src="/3d/?estacion=${i}" title="Mapa 3D" allow="fullscreen; geolocation" style="width:100%;height:100%;border:0"></iframe><button class="kudo" style="position:absolute;right:8px;top:8px;background:var(--bg)" onclick="big3d(this)">Ampliar</button>`}
 function big3d(b){const m=$('#m3d'),big=m.style.height==='380px';m.style.height=big?'78dvh':'380px';b.textContent=big?'Reducir':'Ampliar'}
-function ov0(){clearInterval(T);if(W!=null){navigator.geolocation.clearWatch(W);W=null}const o=$('.ov');if(o)o.remove()}
-function elegir(){ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Nueva grabación</div><h1>¿Dónde esquías hoy?</h1></div>${st.sim?`<label style="display:flex;gap:10px;align-items:center;color:var(--tx);margin:0 0 14px"><input type="checkbox" id="real" style="width:auto"> Usar el GPS de este dispositivo (experimental)</label>`:''}<div class="grid">${S.map(s=>stCard(s,'traquear')).join('')}</div>`)}
-function traquear(i){const s=SM[i];const rc=$('#real');if(rc)st.real=rc.checked;if(!st.sim)st.real=true;let c=3;ov(`<div class="speed"><small>${s.n}</small><div class="n" id="sp">${c}</div><small>Preparando GPS…</small></div>`);
+function ov0(){clearInterval(T);stopW();const o=$('.ov');if(o)o.remove();st.rec=recLoad();if(st.me)render()}
+function elegir(){if(st.rec&&SM[st.rec.station]){tab('est');return flash('Tienes un día sin guardar. Guárdalo o descártalo antes de empezar otro.')}ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Nueva grabación</div><h1>¿Dónde esquías hoy?</h1></div>${st.sim&&!NAT?`<label style="display:flex;gap:10px;align-items:center;color:var(--tx);margin:0 0 14px"><input type="checkbox" id="real" style="width:auto"> Usar el GPS de este dispositivo (experimental)</label>`:''}<div class="grid">${S.map(s=>stCard(s,'traquear')).join('')}</div>`)}
+function traquear(i){const s=SM[i];const rc=$('#real');if(rc)st.real=rc.checked;if(!st.sim||NAT)st.real=true;let c=3;ov(`<div class="speed"><small>${s.n}</small><div class="n" id="sp">${c}</div><small>Preparando GPS…</small></div>`);
  const cd=setInterval(()=>{c--;if(c>0){$('#sp').textContent=c;return}clearInterval(cd);st.real?runReal(s):run(s)},800)}
 // Simulación de GPS: en la app real, estos datos vienen del grabador nativo.
 function run(s){let t=0,v=0,max=0,desc=0,bj=0,sum=0,ns=0,col={v:0,a:0,r:0,n:0},ph='sube',x=0,y=0;const tr=[[0,0]],sp=[];
@@ -180,33 +180,70 @@ function run(s){let t=0,v=0,max=0,desc=0,bj=0,sum=0,ns=0,col={v:0,a:0,r:0,n:0},p
  T=setInterval(()=>{t++;if(ph==='sube'){v=8+Math.random()*3;if(t%5===0){ph='baja';bj++;const c=['v','a','r','n'][Math.floor(Math.random()*4)];col[c]++;$('#sl').textContent='Bajada '+bj+' · pista '+{v:'verde',a:'azul',r:'roja',n:'negra'}[c]}}else{v=Math.min(v+6+Math.random()*9,70+Math.random()*30);desc+=v*.22;sum+=v;ns++;x+=3+Math.random()*5;y+=2+Math.random()*4;if(tr.length<60)tr.push([x,y]);if(t%5===3){ph='sube';$('#sl').textContent='En el remonte'}}max=Math.max(max,v);if(sp.length<400)sp.push(Math.round(v));
   $('#sp').textContent=Math.round(v);$('#k1').textContent=fmt(desc);$('#k2').textContent=bj;$('#k3').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0')},500);
  $('#fin').onclick=()=>{clearInterval(T);const d=desc*18+4000,k={v:col.v+4,a:col.a+5,r:col.r+4,n:col.n+1};saveDay(s,{station:s.id,desnivel:d,km:d/190,horas:3.4+Math.random(),bajadas:bj+12,vmax:Math.max(max,62),vmed:ns?sum/ns:30,col:k,track:tr,speed:sp,source:'sim'},$('#fin'))}}
-async function saveDay(s,body,btn){btn.disabled=true;btn.textContent='Guardando…';try{const r=await api('days',{body});await refresh();resumen(s,r)}catch(e){btn.disabled=false;btn.textContent='Reintentar guardado';flash(e.message)}}
+async function saveDay(s,body,btn,after){btn.disabled=true;btn.textContent='Guardando…';try{const r=await api('days',{body});if(after)after();await refresh();resumen(s,r)}catch(e){btn.disabled=false;btn.textContent='Reintentar guardado';flash(e.message)}}
 const downs=(a,n)=>a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);
-// GPS real: velocidad, desnivel (altitud) y distancia de los fixes; el color de cada bajada es una ESTIMACIÓN por pendiente media.
-function runReal(s){
- if(!navigator.geolocation){flash('Este dispositivo no tiene GPS. Se usa la simulación.');return run(s)}
- let last=null,o=null,desc=0,km=0,max=0,sv=0,nv=0,tSki=0,runs=0,skiing=false,drop=0,len=0;const col={v:0,a:0,r:0,n:0},tr=[],sp=[],t0=Date.now();
- const endRun=()=>{if(len>150&&drop>30){runs++;const g=drop/len*100;col[g<10?'v':g<18?'a':g<27?'r':'n']++}drop=0;len=0};
- ov(`<div class="speed"><small>${s.n} · GPS real</small><div class="n" id="sp">0</div><small>km/h</small><div class="kpis" style="margin:36px 0 14px;text-align:left"><div><b id="k1">0</b><small>m desnivel</small></div><div><b id="k2">0</b><small>bajadas</small></div><div><b id="k3">0:00</b><small>tiempo</small></div></div><div class="card" id="sl" style="text-align:left">Esperando señal GPS…</div><button class="btn" id="fin">Terminar el día</button></div>`);
- T=setInterval(()=>{const t=Math.floor((Date.now()-t0)/1000);$('#k3').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0')},1000);
- W=navigator.geolocation.watchPosition(p=>{const c=p.coords;if(c.accuracy>40)return;if(!o)o=c;
-  const x=(c.longitude-o.longitude)*111320*Math.cos(o.latitude*Math.PI/180),y=-(c.latitude-o.latitude)*110540;let v=c.speed!=null?c.speed*3.6:0;
-  if(last){const dt=(p.timestamp-last.t)/1000,dd=Math.hypot(x-last.x,y-last.y),dh=c.altitude!=null&&last.alt!=null?c.altitude-last.alt:0;
-   if(!v&&dt>0)v=dd/dt*3.6;
-   if(v>8&&dh<-0.3){skiing=true;desc-=dh;km+=dd/1000;tSki+=dt;drop-=dh;len+=dd;sv+=v;nv++;max=Math.max(max,v)}else if(skiing&&(v<5||dh>0.5)){skiing=false;endRun()}}
-  last={x,y,alt:c.altitude,t:p.timestamp};tr.push([x,y]);sp.push(Math.round(v));
-  $('#sp').textContent=Math.round(v);$('#k1').textContent=fmt(desc);$('#k2').textContent=runs;$('#sl').textContent=skiing?'Esquiando':'En remonte o parado'},
-  e=>{flash('No se pudo usar el GPS: '+e.message);ov0()},{enableHighAccuracy:true,maximumAge:0});
- $('#fin').onclick=()=>{navigator.geolocation.clearWatch(W);W=null;clearInterval(T);endRun();
-  if(desc<20){flash('No se ha detectado ninguna bajada. No se guarda el día.');return ov0()}
-  const xs=tr.map(p=>p[0]),ys=tr.map(p=>p[1]),mx=Math.min(...xs),my=Math.min(...ys);
-  saveDay(s,{station:s.id,desnivel:desc,km,horas:tSki/3600,bajadas:runs,vmax:max,vmed:nv?sv/nv:0,col,track:downs(tr.map(p=>[p[0]-mx,p[1]-my]),60),speed:downs(sp,400),source:'gps'},$('#fin'))}}
+// ---- Grabación real. En la app de Android la hace el grabador nativo (sigue con el teléfono bloqueado y apunta cada posición en un
+// fichero); en un navegador, el GPS de la página. Las posiciones se guardan en el dispositivo mientras dura el día: si la app
+// se cierra, se queda sin batería o falla la subida, el día se recupera desde el aviso de la portada.
+const NAT=window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()?window.Capacitor.Plugins.Grabador:null;
+const REC='pistea_rec',recLoad=()=>{try{return JSON.parse(localStorage.getItem(REC))}catch(e){return null}},recSave=r=>{try{localStorage.setItem(REC,JSON.stringify(r))}catch(e){}},recClear=()=>{try{localStorage.removeItem(REC)}catch(e){}};
+const stopW=()=>{if(W){const f=W;W=null;try{f()}catch(e){}}curSave=null};
+addEventListener('pagehide',()=>{if(curSave)curSave()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&curSave)curSave()});
+const parseNat=row=>{const[t,lat,lon,acc,v,,,,alt]=row.split(','),n=x=>x===''||x===undefined?null:+x;if(n(lat)==null||n(lon)==null||n(t)==null)return null;return{t:+t,lat:+lat,lon:+lon,alt:n(alt),acc:n(acc)??99,v:n(v)}};
+// Cálculo del día a partir de posiciones {t (ms), lat, lon, alt, acc, v (m/s)}: desnivel (altitud suavizada, solo bajando), distancia, velocidad y bajadas.
+// El color de cada bajada es una ESTIMACIÓN por su pendiente media (no se compara aún con las pistas del catálogo).
+function Calc(){Object.assign(this,{last:null,o:null,alt:null,desc:0,km:0,max:0,sv:0,nv:0,tSki:0,runs:0,skiing:false,still:0,drop:0,len:0,col:{v:0,a:0,r:0,n:0},tr:[],sp:[],v:0,lastT:0})}
+Calc.prototype.endRun=function(){if(this.len>150&&this.drop>30){this.runs++;const g=this.drop/this.len*100;this.col[g<10?'v':g<18?'a':g<27?'r':'n']++}this.drop=0;this.len=0;this.skiing=false;this.still=0};
+Calc.prototype.add=function(f){if(f.acc>40)return;const o=this.o||(this.o=f),x=(f.lon-o.lon)*111320*Math.cos(o.lat*Math.PI/180),y=-(f.lat-o.lat)*110540,l=this.last;
+ const a=f.alt==null?null:this.alt==null?f.alt:this.alt+.15*(f.alt-this.alt);let v=f.v!=null?f.v*3.6:0;
+ if(l){const dt=(f.t-l.t)/1000;if(dt<=0)return;
+  if(dt>30)this.endRun();   // se perdió la señal: no se unen las dos posiciones
+  else{const dd=Math.hypot(x-l.x,y-l.y),dh=a!=null&&this.alt!=null?a-this.alt:0;if(!v)v=dd/dt*3.6;
+   if(v>8&&dh<-.05){this.skiing=true;this.still=0;this.desc-=dh;this.km+=dd/1000;this.tSki+=dt;this.drop-=dh;this.len+=dd;this.sv+=v;this.nv++;this.max=Math.max(this.max,v)}
+   else if(this.skiing&&(this.still+=dt)>8)this.endRun()}}   // una bajada solo termina tras 8 s sin bajar: un salto o un parón del GPS no la corta
+ if(a!=null)this.alt=a;this.last={x,y,t:f.t};this.lastT=f.t;this.tr.push([x,y]);this.sp.push(Math.round(v));this.v=v};
+Calc.prototype.payload=function(s){this.endRun();if(this.desc<20)return null;let mx=1e9,my=1e9;for(const p of this.tr){if(p[0]<mx)mx=p[0];if(p[1]<my)my=p[1]}
+ return{station:s.id,desnivel:this.desc,km:this.km,horas:this.tSki/3600,bajadas:this.runs,vmax:this.max,vmed:this.nv?this.sv/this.nv:0,col:this.col,track:downs(this.tr.map(p=>[p[0]-mx,p[1]-my]),60),speed:downs(this.sp,400),source:'gps'}};
+async function runReal(s,rs){
+ const C=new Calc(),t0=rs?rs.t0:Date.now();let id=rs&&rs.id,fx=rs&&!NAT?(rs.fx||[]):[],last=0,lock=null,sub=null,wid=null,next=0,ready=!NAT;const q=[];
+ const rec=()=>recSave({station:s.id,t0,native:!!NAT,id,fx:NAT?undefined:fx});
+ ov(`<div class="speed"><small>${s.n} · GPS real</small><div class="n" id="sp">0</div><small>km/h</small><div class="kpis" style="margin:36px 0 14px;text-align:left"><div><b id="k1">0</b><small>m desnivel</small></div><div><b id="k2">0</b><small>bajadas</small></div><div><b id="k3">0:00</b><small>tiempo</small></div></div><div class="card" id="sl" style="text-align:left">Esperando señal GPS…</div><button class="btn" id="fin">Terminar el día</button><small style="display:block;margin-top:12px">Si cierras esta pantalla, el día queda guardado en el dispositivo y lo recuperas desde Estaciones.</small></div>`);
+ const paint=()=>{const e=$('#sp');if(!e)return;e.textContent=Math.round(C.v);$('#k1').textContent=fmt(C.desc);$('#k2').textContent=C.runs;$('#sl').textContent=C.skiing?'Esquiando':'En remonte o parado'};
+ T=setInterval(()=>{const e=$('#k3');if(!e)return;const t=Math.floor((Date.now()-t0)/1000);e.textContent=Math.floor(t/3600)?Math.floor(t/3600)+':'+String(Math.floor(t/60)%60).padStart(2,'0')+':'+String(t%60).padStart(2,'0'):Math.floor(t/60)+':'+String(t%60).padStart(2,'0')},1000);
+ W=()=>{if(!NAT)rec();if(sub)sub.remove();if(wid!=null)navigator.geolocation.clearWatch(wid);if(lock&&lock.release)lock.release().catch(()=>{})};
+ const fail=m=>{flash(m);ov0()};
+ if(NAT){
+  try{sub=await NAT.addListener('fix',({n,row})=>{if(!ready){q.push([n,row]);return}if(n<next)return;next=n+1;const f=parseNat(row);if(f){C.add(f);paint()}});
+   const stt=await NAT.status();
+   if(!(stt.recording&&rs&&rs.id)){const r=await NAT.start({since:t0});id=r.id}else id=rs.id;
+   rec();const rd=await NAT.read({id,from:0});rd.rows.forEach(r=>{const f=parseNat(r);if(f)C.add(f)});next=rd.next;ready=true;q.forEach(([n,row])=>{if(n>=next){next=n+1;const f=parseNat(row);if(f)C.add(f)}});paint()}
+  catch(e){return fail(e.code==='denied'?'Sin permiso de ubicación. Actívalo en los ajustes del teléfono.':e.code==='off'?'La ubicación del teléfono está apagada.':e.code==='approximate'?'Activa la ubicación precisa para Pistea.':'No se pudo empezar a grabar: '+(e.message||e))}
+ }else{
+  if(!navigator.geolocation)return fail('Este dispositivo no tiene GPS.');
+  fx.forEach(a=>C.add({t:a[0],lat:a[1],lon:a[2],alt:a[3],acc:a[4],v:a[5]}));rec();curSave=rec;paint();
+  wid=navigator.geolocation.watchPosition(p=>{const c=p.coords,f={t:p.timestamp,lat:c.latitude,lon:c.longitude,alt:c.altitude,acc:c.accuracy,v:c.speed};C.add(f);fx.push([f.t,f.lat,f.lon,f.alt,f.acc,f.v]);if(Date.now()-last>10000){last=Date.now();rec()}paint()},
+   e=>fail('No se pudo usar el GPS: '+e.message),{enableHighAccuracy:true,maximumAge:0,timeout:30000});
+  try{lock=await navigator.wakeLock.request('screen')}catch(e){}
+ }
+ const btn=$('#fin');if(!btn)return;
+ btn.onclick=async()=>{stopW();clearInterval(T);if(NAT)try{await NAT.stop()}catch(e){}
+  const p=C.payload(s);if(!p){flash('No se ha detectado ninguna bajada. No se guarda el día.');recDrop(id);return ov0()}
+  p.total=Math.max(0,((C.lastT||Date.now())-t0)/36e5);saveDay(s,p,btn,()=>recDrop(id))}}
+function recDrop(id){recClear();st.rec=null;if(NAT&&id)NAT.clear({id}).catch(()=>{})}
+const recBanner=()=>{const r=st.rec,s=r&&SM[r.station];if(!s)return '';const h=new Date(r.t0).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),can=!r.native||st.recRun;
+ return `<div class="card" style="border-color:var(--ac);margin-bottom:18px"><div class="eyebrow">Día sin guardar</div><div style="font-weight:600;margin:6px 0 2px">${esc(s.n)}</div><small>Empezó el ${h}. Está grabado en este dispositivo y aún no se ha subido.</small><div style="display:flex;gap:8px;margin-top:12px">${can?'<button class="btn" style="margin:0;padding:12px" onclick="recResume()">Retomar</button>':''}<button class="btn ${can?'gh':''}" style="margin:0;padding:12px" onclick="recSaveDay()">Guardar día</button><button class="btn gh" style="margin:0;padding:12px" onclick="recDiscard()">Descartar</button></div></div>`};
+const recResume=()=>{const r=st.rec;if(r&&SM[r.station])runReal(SM[r.station],r)};
+async function recSaveDay(){const r=st.rec,s=r&&SM[r.station];if(!s)return recDiscard(true);const C=new Calc();
+ try{if(r.native){if(st.recRun)await NAT.stop();const rd=await NAT.read({id:r.id,from:0});rd.rows.forEach(x=>{const f=parseNat(x);if(f)C.add(f)})}else(r.fx||[]).forEach(a=>C.add({t:a[0],lat:a[1],lon:a[2],alt:a[3],acc:a[4],v:a[5]}))}catch(e){return flash('No se pudo leer la grabación: '+(e.message||e))}
+ const p=C.payload(s);if(!p){flash('Ese día no tiene bajadas que guardar.');return recDiscard(true)}
+ p.total=Math.max(0,((C.lastT||r.t0)-r.t0)/36e5);saveDay(s,p,{},()=>recDrop(r.id))}
+async function recDiscard(quiet){const r=st.rec;if(!quiet&&!confirm('¿Descartar el día sin guardar? No se podrá recuperar.'))return;if(NAT&&r&&r.id){try{if(st.recRun)await NAT.stop()}catch(e){}}recDrop(r&&r.id);render()}
 function resumen(s,r){st.last={s,d:r.day};const d=r.day,tot=d.col.v+d.col.a+d.col.r+d.col.n,C=[['Verdes','--g',d.col.v],['Azules','--b',d.col.a],['Rojas','--r',d.col.r],['Negras','--k',d.col.n]];
  st.toast=r.before&&r.after<r.before?`Subes del puesto ${r.before} al ${r.after} de España`:0;
  const sp=d.speed.length>1?(()=>{const m=Math.max(...d.speed,1);return `<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none"><path d="${d.speed.map((v,i)=>(i?'L':'M')+(i/(d.speed.length-1)*300).toFixed(1)+' '+(76-v/m*70).toFixed(1)).join('')}" fill="none" stroke="#8ab4ff" stroke-width="1.6" stroke-linejoin="round"/></svg>`})():'';
  ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Resumen del día · ${s.n}</div><h1>Día guardado</h1></div>
  <div class="hero" style="margin-bottom:12px"><small>Desnivel esquiado</small><div class="big" style="margin-top:6px">${fmt(d.desnivel)}<span class="mu" style="font-size:20px"> m</span></div><small style="display:block;margin-top:10px">Puesto ${r.posStation} en ${s.n} · puesto ${r.after} en España</small></div>
- <div class="kpis"><div><b>${d.km.toFixed(1)}</b><small>km</small></div><div><b>${d.bajadas}</b><small>bajadas</small></div><div><b>${d.vmax.toFixed(0)}</b><small>vel. máx km/h</small></div><div><b>${d.vmed.toFixed(0)}</b><small>vel. media km/h</small></div><div><b>${d.horas.toFixed(1)} h</b><small>esquiando</small></div><div><b>${(d.horas+1.6).toFixed(1)} h</b><small>tiempo total</small></div></div>
+ <div class="kpis"><div><b>${d.km.toFixed(1)}</b><small>km</small></div><div><b>${d.bajadas}</b><small>bajadas</small></div><div><b>${d.vmax.toFixed(0)}</b><small>vel. máx km/h</small></div><div><b>${d.vmed.toFixed(0)}</b><small>vel. media km/h</small></div><div><b>${d.horas.toFixed(1)} h</b><small>esquiando</small></div><div><b>${(d.total||d.horas+1.6).toFixed(1)} h</b><small>tiempo total</small></div></div>
  <h2>Recorrido</h2><div class="map" style="height:150px;margin-top:0">${trk(d.track,300,150)}</div>
  ${sp?`<h2>Velocidad</h2><div class="card">${sp}</div>`:''}
  <h2>Bajadas por dificultad</h2><div class="card"><div class="stack">${C.map(c=>`<i style="flex:${c[2]||0};background:var(${c[1]})"></i>`).join('')}</div><div class="leg">${C.map(c=>`<span style="--c:var(${c[1]})">${c[0]} ${c[2]}</span>`).join('')}</div></div>

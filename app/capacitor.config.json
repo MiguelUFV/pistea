@@ -1,0 +1,15 @@
+{
+  "appId": "com.pistea.app",
+  "appName": "Pistea",
+  "webDir": "www",
+  "server": {
+    "url": "http://10.0.2.2:3000",
+    "cleartext": true,
+    "allowNavigation": [
+      "10.0.2.2:3000"
+    ]
+  },
+  "android": {
+    "useLegacyBridge": true
+  }
+}
