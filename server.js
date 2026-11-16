@@ -473,14 +473,14 @@ const routes = {
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8' };
 const TEXTY = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg']);
-function serveFile(req, res, root, rel) {
+function serveFile(req, res, root, rel, cache) {
   let p; try { p = decodeURIComponent(rel); } catch { res.writeHead(400); return res.end(); }
   if (p.includes('\0')) { res.writeHead(400); return res.end(); }
   let f = path.resolve(root, '.' + path.sep + p.replace(/^\/+/, ''));
   if (f !== root && !f.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }   // nunca fuera de la carpeta
   let s; try { s = fs.statSync(f); if (s.isDirectory()) { f = path.join(f, 'index.html'); s = fs.statSync(f); } } catch { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('No encontrado'); }
   const ext = path.extname(f).toLowerCase(), lm = s.mtime.toUTCString();
-  const h = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Last-Modified': lm, 'Cache-Control': /\/assets\//.test(f.replace(/\\/g, '/')) ? 'public, max-age=31536000, immutable' : ext === '.html' ? 'no-cache' : 'public, max-age=3600', 'X-Content-Type-Options': 'nosniff' };
+  const h = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Last-Modified': lm, 'Cache-Control': cache || (/\/assets\//.test(f.replace(/\\/g, '/')) ? 'public, max-age=31536000, immutable' : ext === '.html' ? 'no-cache' : 'public, max-age=3600'), 'X-Content-Type-Options': 'nosniff' };
   if (ext === '.html') h['X-Frame-Options'] = 'SAMEORIGIN';
   if (req.headers['if-modified-since'] === lm) { res.writeHead(304, h); return res.end(); }
   if (TEXTY.has(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, { ...h, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }); return fs.createReadStream(f).pipe(zlib.createGzip()).pipe(res); }
@@ -498,7 +498,7 @@ async function serveAvatar(req, res, name) {
 }
 const PAGE_HEADERS = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN', 'Cross-Origin-Opener-Policy': 'same-origin',
   'Permissions-Policy': 'geolocation=(self), camera=(), microphone=(), payment=(), usb=()',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'" };
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'" };
 
 async function handler(req, res) {
   try {
@@ -519,7 +519,7 @@ async function handler(req, res) {
       return await r({ req, res, u, q: url.searchParams, b });
     }
     if (url.pathname.startsWith('/avatars/')) return await serveAvatar(req, res, url.pathname.slice(9));
-    if (url.pathname === '/calc.js') return serveFile(req, res, path.join(__dirname, 'public'), 'calc.js');
+    if (url.pathname === '/calc.js' || url.pathname === '/app.js') return serveFile(req, res, path.join(__dirname, 'public'), url.pathname.slice(1), 'no-cache');   // se revalidan siempre: nunca una versión vieja con una página nueva
     if (url.pathname.startsWith('/img/')) return serveFile(req, res, path.join(__dirname, 'public', 'img'), url.pathname.slice(4));
     if (url.pathname === '/3d') { res.writeHead(301, { Location: '/3d/' + url.search }); return res.end(); }
     if (url.pathname.startsWith('/3d/')) return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
