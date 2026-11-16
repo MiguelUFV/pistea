@@ -37,12 +37,14 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS audit_logs(id TEXT PRIMARY KEY, uid TEXT, action TEXT NOT NULL, ip TEXT NOT NULL, ua TEXT, details TEXT, ts INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS avatars(uid TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, updated INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS hits(k TEXT NOT NULL, ts INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS blocks(a TEXT NOT NULL, b TEXT NOT NULL, ts INTEGER, PRIMARY KEY(a, b))`,
+  `CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY, reporter TEXT NOT NULL, target TEXT NOT NULL, day TEXT, reason TEXT NOT NULL, note TEXT, ts INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', resolved_by TEXT, resolved_at INTEGER, action TEXT)`,
   `CREATE TABLE IF NOT EXISTS verifs(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER)`];
 const ALTERS = [['users', 'avatar TEXT'], ['users', 'age INTEGER'], ['users', 'bio TEXT'], ['users', 'station_home TEXT'], ['users', "modality TEXT DEFAULT 'ski'"], ['users', "level TEXT DEFAULT 'intermedio'"],
-  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER']];   // verified NULL = cuenta anterior a la verificación (se da por buena)
+  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER'], ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
 const INDEXES = ['CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts)', 'CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts)',
   'CREATE INDEX IF NOT EXISTS i_tokens_uid ON tokens(uid)', 'CREATE INDEX IF NOT EXISTS i_audit_uid ON audit_logs(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_audit_ts ON audit_logs(ts)',
-  'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)'];
+  'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)', 'CREATE INDEX IF NOT EXISTS i_blocks_b ON blocks(b)', 'CREATE INDEX IF NOT EXISTS i_reports ON reports(status, target)'];
 async function init() {
   if (DB_URL.startsWith('file:')) await run('PRAGMA journal_mode=WAL').catch(() => {});
   await atomic(SCHEMA.map(s => [s]));
@@ -62,10 +64,12 @@ async function housekeeping(force) {   // caducidades y retención de datos (RGP
 const WIN = { hoy: DAY, semana: 7 * DAY, temporada: 365 * DAY };
 const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)', vmax: 'MAX(vmax)' };   // lista cerrada: nunca entra texto del usuario en el SQL
 const SRC = ALLOW_SIM ? '1=1' : "src!='sim'", SRC_D = ALLOW_SIM ? '1=1' : "d.src!='sim'";
-const OK_U = 'COALESCE(u.verified,1)=1', OK_UID = c => `${c} IN (SELECT id FROM users WHERE COALESCE(verified,1)=1)`;   // ver VERIFY
-const rankRows = (metric, st, period, limit = 10, self = '') => all(`SELECT d.uid uid, u.alias alias, u.avatar avatar, ${MX[metric]} v FROM days d JOIN users u ON u.id=d.uid WHERE d.ts>=? AND (? IS NULL OR d.station=?) AND ${SRC_D} AND (${VERIFY ? OK_U : '1=1'} OR d.uid=?) GROUP BY d.uid ORDER BY v DESC, d.uid LIMIT ?`, [Date.now() - WIN[period], st, st, self, limit]);
+const pubCond = p => `${VERIFY ? `COALESCE(${p}verified,1)=1 AND ` : ''}COALESCE(${p}hidden,0)=0 AND COALESCE(${p}banned,0)=0`;   // ver VERIFY
+const pubU = () => pubCond('u.'), pubUid = c => `${c} IN (SELECT id FROM users WHERE ${pubCond('')})`;
+const notBlocked = c => `${c} NOT IN (SELECT b FROM blocks WHERE a=?) AND ${c} NOT IN (SELECT a FROM blocks WHERE b=?)`;   // en las dos direcciones
+const rankRows = (metric, st, period, limit = 10, self = '') => all(`SELECT d.uid uid, u.alias alias, u.avatar avatar, ${MX[metric]} v FROM days d JOIN users u ON u.id=d.uid WHERE d.ts>=? AND (? IS NULL OR d.station=?) AND ${SRC_D} AND (${pubU()} OR d.uid=?) GROUP BY d.uid ORDER BY v DESC, d.uid LIMIT ?`, [Date.now() - WIN[period], st, st, self, limit]);
 async function posOf(uid, metric, st, period) {
-  const r = await one(`WITH t AS (SELECT uid, ${MX[metric]} v FROM days WHERE ts>=? AND (? IS NULL OR station=?) AND ${SRC} AND (${VERIFY ? OK_UID('uid') : '1=1'} OR uid=?) GROUP BY uid)
+  const r = await one(`WITH t AS (SELECT uid, ${MX[metric]} v FROM days WHERE ts>=? AND (? IS NULL OR station=?) AND ${SRC} AND (${pubUid('uid')} OR uid=?) GROUP BY uid)
     SELECT (SELECT v FROM t WHERE uid=?) mine, (SELECT COUNT(*) FROM t WHERE v>(SELECT v FROM t WHERE uid=?))+1 pos, (SELECT COUNT(*) FROM t) total, (SELECT MIN(v) FROM t WHERE v>(SELECT v FROM t WHERE uid=?)) nxt`, [Date.now() - WIN[period], st, st, uid, uid, uid, uid]);
   return !r || r.mine == null ? null : { pos: r.pos, v: r.mine, total: r.total, gap: r.nxt == null ? 0 : r.nxt - r.mine };
 }
@@ -104,7 +108,7 @@ async function newToken(u, req) {
 }
 async function authUser(req, res) {
   const t = tokenOf(req); if (!t) return null;
-  const u = await one('SELECT u.*, k.exp kexp, k.th kth FROM tokens k JOIN users u ON u.id=k.uid WHERE k.th=? AND k.exp>?', [sha(t), Date.now()]);
+  const u = await one('SELECT u.*, k.exp kexp, k.th kth FROM tokens k JOIN users u ON u.id=k.uid WHERE k.th=? AND k.exp>? AND COALESCE(u.banned,0)=0', [sha(t), Date.now()]);
   if (!u) { if (cookies(req)[COOKIE]) clearSession(req, res); return null; }
   if (u.kexp < Date.now() + SESSION - DAY) { await run('UPDATE tokens SET exp=? WHERE th=?', [Date.now() + SESSION, u.kth]); setSession(req, res, t); }   // sesión deslizante: 90 días desde el último uso
   else if (!cookies(req)[COOKIE]) setSession(req, res, t);   // venía del token antiguo en localStorage: pasa a cookie
@@ -119,10 +123,18 @@ function readBody(req, max) {
 const str = (v, max) => typeof v === 'string' ? v.slice(0, max) : '';
 const text = (v, max) => str(v, max * 2).replace(/[\p{Cc}\p{Cf}]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max);   // sin caracteres de control ni de dirección (RTL)
 const num = (v, max) => { v = +v; return Number.isFinite(v) ? Math.max(0, Math.min(v, max)) : 0; };
+// Filtro básico de nombres y biografías ofensivos (insultos, odio). Lo que se escape se cubre con las denuncias.
+const BAD_WORDS = new Set(['puta', 'putas', 'puto', 'putos', 'puton', 'zorra', 'zorras', 'cabron', 'cabrona', 'cabrones', 'maricon', 'maricones', 'marica', 'bollera', 'polla', 'pollas', 'mierda', 'follar', 'gilipollas', 'gilipolla', 'subnormal', 'subnormales', 'retrasado', 'retrasada', 'mongolo', 'mongola', 'nazi', 'nazis', 'hitler', 'negrata', 'sudaca', 'sudacas', 'violador', 'pederasta', 'pedofilo', 'zoofilia', 'porno', 'pornhub', 'xvideos', 'onlyfans', 'fuck', 'fucker', 'shit', 'bitch', 'cunt', 'nigger', 'nigga', 'faggot', 'whore']);
+const BAD_PARTS = ['hijodeputa', 'hijoputa', 'gilipoll', 'malparid', 'mecagoen', 'putamadre', 'chupamela', 'comemela', 'subnormal', 'maricon'];
+function offensive(v) {
+  const n = String(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[0@4]/g, m => ({ 0: 'o', '@': 'a', 4: 'a' }[m])).replace(/[1!|]/g, 'i').replace(/3/g, 'e').replace(/[5$]/g, 's').replace(/7/g, 't');
+  const words = n.split(/[^a-zñ]+/).filter(Boolean), joined = words.join('');
+  return words.some(w => BAD_WORDS.has(w)) || BAD_PARTS.some(p => joined.includes(p));
+}
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const normEmail = v => str(v, 254).trim().toLowerCase();
 const safeAvatar = a => typeof a === 'string' && /^\/avatars\/[a-z0-9_.]+(\?v=\d+)?$/.test(a) ? a : null;
-const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified });
+const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified, admin: isAdmin(u) || undefined });
 const audit = (uid, action, req, details = {}) => run('INSERT INTO audit_logs(id,uid,action,ip,ua,details,ts) VALUES(?,?,?,?,?,?,?)', [rid(), uid || null, action, ipOf(req), str(req.headers['user-agent'], 200), JSON.stringify(details), Date.now()]).catch(e => console.error('[auditoría]', e.message));
 
 // ---------- contraseñas: scrypt (N=32768) con sal propia; los hashes antiguos (N=16384) se renuevan al entrar ----------
@@ -144,6 +156,9 @@ function weakPw(pw, email, alias) {
 // ---------- correo ----------
 // Proveedor: Brevo (BREVO_API_KEY: gratis, 300/día, basta con verificar el remitente) o Resend (RESEND_API_KEY: necesita
 // dominio propio). MAIL_FROM = "Pistea <remitente@...>". Sin proveedor: en local se escribe en la consola; en producción no se envía.
+const ADMINS = new Set(String(env.ADMIN_EMAILS || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean));   // correos que moderan
+const isAdmin = u => !!u && ADMINS.has(u.email) && u.verified !== 0;
+const blockedEither = async (a, b) => !!(await one('SELECT 1 x FROM blocks WHERE (a=? AND b=?) OR (a=? AND b=?)', [a, b, b, a]));
 const MAIL_READY = !!(env.BREVO_API_KEY || env.RESEND_API_KEY);
 const VERIFY = MAIL_READY || !PROD;   // sin correo en producción no se puede exigir la verificación (nadie podría verificarse)
 const FROM = (() => { const m = String(env.MAIL_FROM || '').match(/^\s*(.*?)\s*<([^>]+)>\s*$/); return m ? { name: m[1] || 'Pistea', email: m[2] } : { name: 'Pistea', email: env.MAIL_FROM || 'onboarding@resend.dev' }; })();
@@ -182,11 +197,13 @@ async function sendVerify(u) {
 const PUB = new Set(['POST /api/register', 'POST /api/login', 'POST /api/forgot', 'POST /api/reset', 'GET /api/config', 'POST /api/logout', 'POST /api/verify']);
 const routes = {
   'POST /api/register': async ({ req, res, b }) => {
-    if (await limited('reg:' + ipOf(req), 10, HOUR)) return send(res, 429, { error: 'Demasiados registros desde esta conexión. Inténtalo más tarde.' });
+    // 10 cuentas creadas por hora y conexión, y 40 intentos (los fallos de validación también cuentan, pero menos)
+    if (await over('reg:' + ipOf(req), 10, HOUR) || await limited('rega:' + ipOf(req), 40, HOUR)) return send(res, 429, { error: 'Demasiados registros desde esta conexión. Inténtalo más tarde.' });
     if (str(b.web, 200)) return send(res, 400, { error: 'No se ha podido crear la cuenta.' });   // campo trampa: solo lo rellenan los bots
     const e = normEmail(b.email), a = text(b.alias, 24), pw = str(b.password, 200);
     if (!EMAIL.test(e)) return send(res, 400, { error: 'Correo no válido.' });
     if (a.length < 2) return send(res, 400, { error: 'El nombre debe tener entre 2 y 24 caracteres.' });
+    if (offensive(a)) return send(res, 400, { error: 'Ese nombre no está permitido. Elige otro.' });
     const weak = weakPw(pw, e, a); if (weak) return send(res, 400, { error: weak });
     if (b.terms !== true) return send(res, 400, { error: 'Debes aceptar la Política de Privacidad y confirmar que tienes al menos 14 años.' });
     let age = null;
@@ -196,6 +213,7 @@ const routes = {
     u.verified = 0;
     try { await run('INSERT INTO users(id,email,alias,salt,hash,age,terms_accepted_at,created,updated_at,verified) VALUES(?,?,?,?,?,?,?,?,?,0)', [u.id, e, a, salt, hash, age, now, now, now]); }
     catch (err) { if (/UNIQUE/i.test(err.message)) return send(res, 409, { error: 'Ese correo ya tiene cuenta. Entra con tu contraseña o recupérala.' }); throw err; }
+    await hit('reg:' + ipOf(req));
     setSession(req, res, await newToken(u, req)); await audit(u.id, 'REGISTER', req);
     if (VERIFY) await sendVerify(u);
     send(res, 200, { user: clean(u) });
@@ -207,6 +225,7 @@ const routes = {
     const u = EMAIL.test(e) ? await one('SELECT * FROM users WHERE email=?', [e]) : null;
     if (!(await checkPw(pw, u))) { await hit('lf:' + e); await audit(u && u.id, 'LOGIN_FAILED', req); return send(res, 401, { error: 'Correo o contraseña incorrectos.' }); }
     await run('DELETE FROM hits WHERE k=?', [hk('lf:' + e)]);
+    if (u.banned) return send(res, 403, { error: 'Esta cuenta está suspendida por incumplir las normas. Escríbenos si crees que es un error.' });
     if (!u.hash.startsWith('s2$')) { const n = await hashPw(pw); await run('UPDATE users SET salt=?, hash=? WHERE id=?', [n.salt, n.hash, u.id]); }   // renueva hashes antiguos
     setSession(req, res, await newToken(u, req)); await audit(u.id, 'LOGIN', req);
     send(res, 200, { user: clean(u) });
@@ -263,13 +282,13 @@ const routes = {
   },
   'POST /api/me': async ({ req, res, u, b }) => {
     const updates = [], params = [], audited = [];
-    if (b.alias !== undefined) { const a = text(b.alias, 24); if (a.length < 2) return send(res, 400, { error: 'El nombre debe tener al menos 2 caracteres.' }); updates.push('alias=?'); params.push(a); audited.push('alias'); }
+    if (b.alias !== undefined) { const a = text(b.alias, 24); if (a.length < 2) return send(res, 400, { error: 'El nombre debe tener al menos 2 caracteres.' }); if (offensive(a)) return send(res, 400, { error: 'Ese nombre no está permitido. Elige otro.' }); updates.push('alias=?'); params.push(a); audited.push('alias'); }
     if (b.age !== undefined) {
       if (b.age === null || b.age === '') updates.push('age=NULL');
       else { const age = parseInt(b.age, 10); if (!Number.isFinite(age) || age < 14 || age > 120) return send(res, 400, { error: 'La edad debe estar entre 14 y 120 años (art. 7 LOPDGDD 3/2018).' }); updates.push('age=?'); params.push(age); }
       audited.push('age');
     }
-    if (b.bio !== undefined) { updates.push('bio=?'); params.push(text(b.bio, 200)); audited.push('bio'); }
+    if (b.bio !== undefined) { const bio = text(b.bio, 200); if (offensive(bio)) return send(res, 400, { error: 'La biografía tiene palabras que no están permitidas.' }); updates.push('bio=?'); params.push(bio); audited.push('bio'); }
     if (b.station_home !== undefined) { const sh = b.station_home ? str(b.station_home, 40) : null; if (sh && !SID.has(sh)) return send(res, 400, { error: 'Estación habitual no válida.' }); updates.push('station_home=?'); params.push(sh); audited.push('station_home'); }
     if (b.modality !== undefined) { const m = str(b.modality, 20); if (!['ski', 'snowboard', 'ambos'].includes(m)) return send(res, 400, { error: 'Modalidad no válida.' }); updates.push('modality=?'); params.push(m); audited.push('modality'); }
     if (b.level !== undefined) { const l = str(b.level, 20); if (!['debutante', 'intermedio', 'avanzado', 'experto'].includes(l)) return send(res, 400, { error: 'Nivel no válido.' }); updates.push('level=?'); params.push(l); audited.push('level'); }
@@ -312,7 +331,7 @@ const routes = {
   'DELETE /api/me': async ({ req, res, u, b }) => {   // derecho de supresión (art. 17 RGPD): se borra todo, sin depender de ON DELETE CASCADE
     if (await limited('del:' + u.id, 10, HOUR)) return send(res, 429, { error: 'Demasiados intentos. Inténtalo más tarde.' });
     if (!(await checkPw(str(b.password, 200), u))) return send(res, 403, { error: 'Contraseña incorrecta.' });
-    await atomic([['DELETE FROM kudos WHERE uid=? OR day IN (SELECT id FROM days WHERE uid=?)', [u.id, u.id]], ['DELETE FROM follows WHERE a=? OR b=?', [u.id, u.id]],
+    await atomic([['DELETE FROM kudos WHERE uid=? OR day IN (SELECT id FROM days WHERE uid=?)', [u.id, u.id]], ['DELETE FROM follows WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM blocks WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM reports WHERE reporter=? OR target=?', [u.id, u.id]],
       ['DELETE FROM days WHERE uid=?', [u.id]], ['DELETE FROM tokens WHERE uid=?', [u.id]], ['DELETE FROM resets WHERE uid=?', [u.id]], ['DELETE FROM verifs WHERE uid=?', [u.id]], ['DELETE FROM avatars WHERE uid=?', [u.id]],
       ['DELETE FROM audit_logs WHERE uid=?', [u.id]], ['DELETE FROM users WHERE id=?', [u.id]]]);
     await audit(u.id, 'ACCOUNT_DELETION', req);   // solo queda constancia del borrado, sin datos personales
@@ -325,7 +344,7 @@ const routes = {
   },
   'GET /api/stations': async ({ res }) => {
     if (Date.now() - stationsCache.t > MIN || !stationsCache.v) {
-      const cnt = Object.fromEntries((await all(`SELECT station s, COUNT(DISTINCT uid) n FROM days WHERE ts>=? AND ${SRC} AND ${VERIFY ? OK_UID('uid') : '1=1'} GROUP BY station`, [Date.now() - WIN.temporada])).map(r => [r.s, r.n]));
+      const cnt = Object.fromEntries((await all(`SELECT station s, COUNT(DISTINCT uid) n FROM days WHERE ts>=? AND ${SRC} AND ${pubUid('uid')} GROUP BY station`, [Date.now() - WIN.temporada])).map(r => [r.s, r.n]));
       const out = {};
       await Promise.all(STATIONS.map(async ([id]) => { out[id] = { skiers: cnt[id] || 0, leaders: cnt[id] ? (await rankRows('desnivel', id, 'temporada', 3)).map(x => ({ alias: x.alias, v: x.v })) : [] }; }));
       stationsCache = { t: Date.now(), v: out };
@@ -336,7 +355,7 @@ const routes = {
     const onlyF = q.get('scope') === 'amigos' ? 1 : 0;
     const rows = await all(`SELECT d.id id, d.uid uid, d.station station, d.ts ts, d.desnivel desnivel, d.km km, d.bajadas bajadas, d.vmax vmax, d.track track, u.alias alias, u.avatar avatar,
       (SELECT COUNT(*) FROM kudos k WHERE k.day=d.id) kudos, EXISTS(SELECT 1 FROM kudos k WHERE k.day=d.id AND k.uid=?) liked
-      FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${VERIFY ? OK_U : '1=1'} OR d.uid=?) AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, onlyF, u.id, u.id]);
+      FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${pubU()} OR d.uid=?) AND ${notBlocked('d.uid')} AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, u.id, u.id, onlyF, u.id, u.id]);
     send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: J(d.track), liked: !!d.liked })));
   },
   'POST /api/days': async ({ res, u, b }) => {
@@ -358,28 +377,71 @@ const routes = {
   'GET /api/users': async ({ res, u, q }) => {
     const s = str(q.get('q'), 40).trim().toLowerCase().replace(/[%_\\]/g, '');
     if (s.length < 2) return send(res, 200, []);
-    const rows = await all(`SELECT id, alias, avatar, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=u.id) following FROM users u WHERE id!=? AND ${VERIFY ? OK_U : '1=1'} AND lower(alias) LIKE ? ORDER BY alias LIMIT 10`, [u.id, u.id, `%${s}%`]);
+    const rows = await all(`SELECT id, alias, avatar, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=u.id) following FROM users u WHERE id!=? AND ${pubU()} AND ${notBlocked('u.id')} AND lower(alias) LIKE ? ORDER BY alias LIMIT 10`, [u.id, u.id, u.id, u.id, `%${s}%`]);
     send(res, 200, rows.map(x => ({ ...x, avatar: safeAvatar(x.avatar), following: !!x.following })));
   },
   'POST /api/follow': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
-    const id = str(b.id, 40); if (id === u.id || !(await one('SELECT 1 x FROM users WHERE id=?', [id]))) return send(res, 400, { error: 'Usuario no válido.' });
+    const id = str(b.id, 40); if (id === u.id || !(await one('SELECT 1 x FROM users WHERE id=?', [id])) || await blockedEither(u.id, id)) return send(res, 400, { error: 'Usuario no válido.' });
     const had = (await run('DELETE FROM follows WHERE a=? AND b=?', [u.id, id])).rowsAffected; if (!had) await run('INSERT OR IGNORE INTO follows(a,b) VALUES(?,?)', [u.id, id]);
     send(res, 200, { following: !had });
   },
   'GET /api/user': async ({ res, u, q }) => {
-    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified FROM users WHERE id=?', [str(q.get('id'), 40)]);
-    if (!t || (VERIFY && t.verified === 0 && t.id !== u.id)) return send(res, 404, { error: 'No existe.' });
+    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned FROM users WHERE id=?', [str(q.get('id'), 40)]);
+    if (!t || (t.id !== u.id && ((VERIFY && t.verified === 0) || t.hidden || t.banned || await blockedEither(u.id, t.id)))) return send(res, 404, { error: 'No existe.' });
     const me = t.id === u.id;
     const [totals, stations, days, pos, stk, followers, following] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT station, ts, desnivel, bajadas, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
       posOf(t.id, 'desnivel', null, 'temporada'), streak(t.id), count('SELECT COUNT(*) n FROM follows WHERE b=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, t.id])]);
-    delete t.verified; send(res, 200, { ...t, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
+    delete t.verified; delete t.hidden; delete t.banned; send(res, 200, { ...t, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
   },
   'POST /api/kudos': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
-    const id = str(b.id, 40); if (!(await one('SELECT 1 x FROM days WHERE id=?', [id]))) return send(res, 404, { error: 'No existe.' });
+    const id = str(b.id, 40), dd = await one('SELECT uid FROM days WHERE id=?', [id]); if (!dd || await blockedEither(u.id, dd.uid)) return send(res, 404, { error: 'No existe.' });
     const had = (await run('DELETE FROM kudos WHERE day=? AND uid=?', [id, u.id])).rowsAffected; if (!had) await run('INSERT OR IGNORE INTO kudos(day,uid) VALUES(?,?)', [id, u.id]);
     send(res, 200, { kudos: await count('SELECT COUNT(*) n FROM kudos WHERE day=?', [id]), liked: !had });
+  },
+  // ---- bloquear y denunciar
+  'POST /api/block': async ({ req, res, u, b }) => {
+    if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
+    const id = str(b.id, 40); if (id === u.id || !(await one('SELECT 1 x FROM users WHERE id=?', [id]))) return send(res, 400, { error: 'Usuario no válido.' });
+    const had = (await run('DELETE FROM blocks WHERE a=? AND b=?', [u.id, id])).rowsAffected;
+    if (!had) await atomic([['INSERT OR IGNORE INTO blocks(a,b,ts) VALUES(?,?,?)', [u.id, id, Date.now()]], ['DELETE FROM follows WHERE (a=? AND b=?) OR (a=? AND b=?)', [u.id, id, id, u.id]]]);
+    await audit(u.id, had ? 'UNBLOCK' : 'BLOCK', req); send(res, 200, { blocked: !had });
+  },
+  'GET /api/blocks': async ({ res, u }) => send(res, 200, await all('SELECT u.id id, u.alias alias FROM blocks k JOIN users u ON u.id=k.b WHERE k.a=? ORDER BY k.ts DESC', [u.id])),
+  'POST /api/report': async ({ req, res, u, b }) => {
+    if (await limited('rp:' + u.id, 10, HOUR)) return send(res, 429, { error: 'Has enviado muchas denuncias. Inténtalo más tarde.' });
+    const target = str(b.target, 40), day = b.day ? str(b.day, 40) : null, reason = str(b.reason, 20), note = text(b.note, 300);
+    if (!['spam', 'ofensivo', 'trampas', 'suplantacion', 'privacidad', 'otro'].includes(reason)) return send(res, 400, { error: 'Elige un motivo.' });
+    if (target === u.id || !(await one('SELECT 1 x FROM users WHERE id=?', [target]))) return send(res, 400, { error: 'Usuario no válido.' });
+    if (day && !(await one('SELECT 1 x FROM days WHERE id=? AND uid=?', [day, target]))) return send(res, 400, { error: 'Día no válido.' });
+    if (!(await one("SELECT 1 x FROM reports WHERE reporter=? AND target=? AND COALESCE(day,'')=? AND status='open'", [u.id, target, day || '']))) {
+      await run('INSERT INTO reports(id,reporter,target,day,reason,note,ts) VALUES(?,?,?,?,?,?,?)', [rid(), u.id, target, day, reason, note, Date.now()]);
+      const n = await count("SELECT COUNT(DISTINCT reporter) n FROM reports WHERE target=? AND status='open'", [target]);
+      if (n >= 3) { await run('UPDATE users SET hidden=1 WHERE id=?', [target]); stationsCache.t = 0; }   // tres personas distintas: se oculta hasta revisarlo
+      if (MAIL_READY) for (const a of ADMINS) sendMail(a, 'Nueva denuncia en Pistea', mail('Nueva denuncia', `Motivo: ${reason}. Denuncias abiertas contra ese usuario: ${n}.`, 'Revisar', APP_URL + '/', 'Entra con tu cuenta de administrador y abre Perfil → Moderación.')).catch(() => {});
+    }
+    await audit(u.id, 'REPORT', req, { reason }); send(res, 200, { ok: true });
+  },
+  // ---- moderación (solo ADMIN_EMAILS)
+  'GET /api/admin/reports': async ({ res, u }) => {
+    if (!isAdmin(u)) return send(res, 403, { error: 'Solo para moderadores.' });
+    const rows = await all(`SELECT r.id id, r.reason reason, r.note note, r.ts ts, r.day day, r.target target, t.alias alias, t.bio bio, t.avatar avatar, t.hidden hidden, t.banned banned, p.alias reporter,
+      (SELECT COUNT(DISTINCT reporter) FROM reports x WHERE x.target=r.target AND x.status='open') n, d.station station, d.desnivel desnivel, d.km km, d.vmax vmax, d.bajadas bajadas
+      FROM reports r JOIN users t ON t.id=r.target LEFT JOIN users p ON p.id=r.reporter LEFT JOIN days d ON d.id=r.day WHERE r.status='open' ORDER BY r.ts DESC LIMIT 100`);
+    send(res, 200, rows.map(r => ({ ...r, avatar: safeAvatar(r.avatar) })));
+  },
+  'POST /api/admin/resolve': async ({ req, res, u, b }) => {
+    if (!isAdmin(u)) return send(res, 403, { error: 'Solo para moderadores.' });
+    const r = await one("SELECT * FROM reports WHERE id=? AND status='open'", [str(b.id, 40)]), action = str(b.action, 20);
+    if (!r) return send(res, 404, { error: 'Esa denuncia ya está resuelta.' });
+    const done = (extra = []) => atomic([...extra, ["UPDATE reports SET status='resolved', resolved_by=?, resolved_at=?, action=? WHERE target=? AND status='open'" + (action === 'quitar_dia' ? ' AND day=?' : ''), [u.id, Date.now(), action, r.target, ...(action === 'quitar_dia' ? [r.day] : [])]]]);
+    if (action === 'descartar') await done([['UPDATE users SET hidden=0 WHERE id=?', [r.target]]]);
+    else if (action === 'quitar_dia' && r.day) await done([['DELETE FROM kudos WHERE day=?', [r.day]], ['DELETE FROM days WHERE id=?', [r.day]]]);
+    else if (action === 'limpiar_perfil') await done([["UPDATE users SET alias='Esquiador ' || substr(id,1,4), bio='', avatar=NULL, hidden=0 WHERE id=?", [r.target]], ['DELETE FROM avatars WHERE uid=?', [r.target]]]);
+    else if (action === 'suspender') await done([['UPDATE users SET banned=1 WHERE id=?', [r.target]], ['DELETE FROM tokens WHERE uid=?', [r.target]]]);
+    else return send(res, 400, { error: 'Acción no válida.' });
+    stationsCache.t = 0; await audit(u.id, 'MODERATION', req, { action, target: r.target }); send(res, 200, { ok: true });
   },
   'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY })
 };

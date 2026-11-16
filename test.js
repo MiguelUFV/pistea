@@ -2,7 +2,7 @@
 // la API como lo haría el navegador: cookie de sesión, cabecera anti-CSRF y reinicios. Uso: node --no-warnings test.js
 const { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path'), crypto = require('crypto');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pistea-')), PORT = 3199, B = `http://localhost:${PORT}`;
-const ENV = { ...process.env, PORT, DATA_DIR: dir, NODE_ENV: 'test' }; delete ENV.TURSO_DATABASE_URL; delete ENV.TURSO_AUTH_TOKEN; delete ENV.VERCEL; delete ENV.RESEND_API_KEY;
+const ENV = { ...process.env, PORT, DATA_DIR: dir, NODE_ENV: 'test', ADMIN_EMAILS: 'admin@pistea.es' }; delete ENV.TURSO_DATABASE_URL; delete ENV.TURSO_AUTH_TOKEN; delete ENV.VERCEL; delete ENV.RESEND_API_KEY;
 let p, out = '';
 const start = () => new Promise(r => { p = spawn(process.execPath, ['--no-warnings', 'server.js'], { cwd: __dirname, env: ENV }); p.stdout.on('data', d => { out += d; if (/Pistea en/.test(d)) setTimeout(r, 300); }); p.stderr.on('data', d => out += d); });
 const stop = () => new Promise(r => { p.once('exit', r); p.kill(); });
@@ -63,6 +63,52 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   await browser()('POST', '/api/verify', { token: linkFor('bea@pistea.es', 'verify') });
   t('verificada: ya sale en el ranking', (await A('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta'));
   t('config dice si se exige verificar', (await A('GET', '/api/config'))[1].verify === true);
+  // --- nombres ofensivos
+  t('nombre ofensivo', (await browser()('POST', '/api/register', { ...REG, email: 'x1@pistea.es', alias: 'G1l1poll4s' }))[0] === 400);
+  t('nombre normal con «puta» dentro de otra palabra', (await A('POST', '/api/me', { alias: 'Disputa Nieve' }))[0] === 200);
+  t('biografía ofensiva', (await A('POST', '/api/me', { bio: 'eres un hijo de puta' }))[0] === 400);
+  await A('POST', '/api/me', { alias: 'Ana Test' });
+  // --- bloquear
+  const anaId = (await A('GET', '/api/me'))[1].user.id;
+  await A('POST', '/api/follow', { id: beaId });
+  t('bloquear', (await A('POST', '/api/block', { id: beaId }))[1].blocked === true);
+  t('bloqueada: fuera de mi comunidad', !(await A('GET', '/api/feed?scope=todos'))[1].some(d => d.alias === 'Bea Oculta'));
+  t('bloqueada: fuera de mi búsqueda', (await A('GET', '/api/users?q=bea'))[1].length === 0);
+  t('bloqueada: perfil no visible (y yo para ella)', (await A('GET', '/api/user?id=' + beaId))[0] === 404 && (await Bx('GET', '/api/user?id=' + anaId))[0] === 404);
+  t('bloqueada: no puede seguirme', (await Bx('POST', '/api/follow', { id: anaId }))[0] === 400);
+  t('bloquear deja de seguir', (await A('GET', '/api/me'))[1].following === 0);
+  t('lista de bloqueados', (await A('GET', '/api/blocks'))[1].some(x => x.id === beaId));
+  t('desbloquear', (await A('POST', '/api/block', { id: beaId }))[1].blocked === false && (await A('GET', '/api/users?q=bea'))[1].length === 1);
+  // --- denunciar
+  const beaDay = (await Bx('GET', '/api/me'))[1].days[0].id;
+  t('denuncia sin motivo', (await A('POST', '/api/report', { target: beaId, reason: 'nada' }))[0] === 400);
+  t('denunciarse a sí misma', (await A('POST', '/api/report', { target: anaId, reason: 'spam' }))[0] === 400);
+  t('denunciar un día ajeno con otro dueño', (await A('POST', '/api/report', { target: anaId === beaId ? '' : beaId, day: 'nope', reason: 'trampas' }))[0] === 400);
+  t('denunciar un día', (await A('POST', '/api/report', { target: beaId, day: beaDay, reason: 'trampas', note: 'Imposible tanto desnivel' }))[0] === 200);
+  t('repetir la misma denuncia no suma', (await A('POST', '/api/report', { target: beaId, day: beaDay, reason: 'trampas' }))[0] === 200);
+  const R1 = browser(), R2 = browser();
+  for (const [Rb, em] of [[R1, 'r1@pistea.es'], [R2, 'r2@pistea.es']]) { await Rb('POST', '/api/register', { ...REG, email: em, alias: 'Rep ' + em[1] }); await browser()('POST', '/api/verify', { token: linkFor(em, 'verify') }); }
+  await R1('POST', '/api/report', { target: beaId, reason: 'ofensivo' });
+  t('dos denuncias: sigue visible', (await A('GET', '/api/users?q=bea'))[1].length === 1);
+  await R2('POST', '/api/report', { target: beaId, reason: 'ofensivo' });
+  t('tres personas: se oculta hasta revisarlo', (await A('GET', '/api/users?q=bea'))[1].length === 0 && !(await A('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta'));
+  // --- moderación
+  t('panel de moderación: no para cualquiera', (await A('GET', '/api/admin/reports'))[0] === 403);
+  const M = browser(); await M('POST', '/api/register', { ...REG, email: 'admin@pistea.es', alias: 'Moderador' });
+  t('moderador sin verificar no modera', (await M('GET', '/api/admin/reports'))[0] === 403);
+  await browser()('POST', '/api/verify', { token: linkFor('admin@pistea.es', 'verify') });
+  t('el moderador se ve como tal', (await M('GET', '/api/me'))[1].user.admin === true);
+  [s, j] = await M('GET', '/api/admin/reports'); t('ve las denuncias', s === 200 && j.length === 3 && j.some(r => r.day === beaDay && r.n === 3), JSON.stringify(j).slice(0, 200));
+  const dayRep = j.find(r => r.day === beaDay), other1 = j.find(r => !r.day);
+  t('quitar el día denunciado', (await M('POST', '/api/admin/resolve', { id: dayRep.id, action: 'quitar_dia' }))[0] === 200 && !(await Bx('GET', '/api/me'))[1].days.some(d => d.id === beaDay));
+  t('descartar: vuelve a ser visible', (await M('POST', '/api/admin/resolve', { id: other1.id, action: 'descartar' }))[0] === 200 && (await A('GET', '/api/users?q=bea'))[1].length === 1);
+  t('no quedan denuncias abiertas', (await M('GET', '/api/admin/reports'))[1].length === 0);
+  await R1('POST', '/api/report', { target: beaId, reason: 'spam' });
+  const rep2 = (await M('GET', '/api/admin/reports'))[1][0];
+  t('suspender', (await M('POST', '/api/admin/resolve', { id: rep2.id, action: 'suspender' }))[0] === 200);
+  t('suspendida: pierde la sesión', (await Bx('GET', '/api/me'))[0] === 401);
+  t('suspendida: no puede entrar', (await browser()('POST', '/api/login', { email: 'bea@pistea.es', password: 'Bea-Esquia-Mucho' }))[0] === 403);
+  t('suspendida: fuera de todo', (await A('GET', '/api/users?q=bea'))[1].length === 0);
   // --- persistencia: se reinicia el servidor y la cuenta, la sesión y los datos siguen ahí
   await A('POST', '/api/days', day());
   await stop(); await start();
