@@ -108,7 +108,7 @@ async function submitAuth(e){e.preventDefault();const m=st.mode,v=id=>$('#'+id)?
   if(m==='forgot'){await api('forgot',{body:{email:em}});st.mode='login';st.err='';st.info='Si ese correo tiene cuenta, te hemos enviado un enlace. Revisa también el spam.';render();return false}
   if(m==='reset'){await api('reset',{body:{token:st.resetToken,password:v('pw')}});st.resetToken=null;st.mode='login';st.err='';st.info='Contraseña cambiada. Ya puedes entrar con la nueva.';render();return false}
   const ageVal=$('#ag')&&$('#ag').value?parseInt($('#ag').value,10):undefined;
-  await api(m==='reg'?'register':'login',{auth:true,body:{email:em,password:v('pw'),alias:al,age:ageVal,terms:!!($('#terms')&&$('#terms').checked),web:v('hp')}});LS('pistea_email',em.trim().toLowerCase());st.em='';st.err='';st.info='';await boot()
+  await api(m==='reg'?'register':'login',{auth:true,body:{email:em,password:v('pw'),alias:al,age:ageVal,terms:!!($('#terms')&&$('#terms').checked),web:v('hp')}});LS('pistea_email',em.trim().toLowerCase());st.em='';st.err='';st.info='';await boot();if(m==='reg'&&st.verify)flash('Cuenta creada. Te hemos enviado un correo para confirmarla.')
  }catch(x){st.err=x.message;st.info='';st.em=em;render();if($('#al'))$('#al').value=al;if($('#pw'))$('#pw').focus()}return false}
 async function logout(silent){if(!silent)await api('logout',{method:'POST',body:{}}).catch(()=>{});LS('pistea_t',null);st.user=null;st.me=null;st.mode='login';render()}
 async function logoutAll(){if(!confirm('Se cerrará la sesión en todos tus dispositivos, también en este.'))return;try{await api('logout-all',{method:'POST',body:{}});logout(true);st.info='Has cerrado la sesión en todos los dispositivos.';render()}catch(e){flash(e.message)}}
@@ -122,7 +122,7 @@ async function refresh(){const m=await api('me',{auth:true});const[s,f]=await Pr
 // ---------- vistas ----------
 const V={
 est(){const zs=['Todas',...new Set(S.map(s=>s.z))],l=S.filter(s=>st.flt==='Todas'||s.z===st.flt),t=st.me.totals;
- return `<div class="top"><div class="eyebrow">Hola, ${esc(st.user.alias.split(' ')[0])}</div><h1>Elige tu estación</h1></div>${recBanner()}
+ return `<div class="top"><div class="eyebrow">Hola, ${esc(st.user.alias.split(' ')[0])}</div><h1>Elige tu estación</h1></div>${verifyBanner()}${recBanner()}
  <div class="hero" style="margin-bottom:18px"><div class="eyebrow">Tu temporada</div><div class="big" style="margin-top:10px">${fmt(t.desnivel)}<span class="mu" style="font-size:18px;font-weight:500"> m</span></div><small style="display:block;margin-top:10px">${t.dias} ${t.dias===1?'día':'días'} · ${fmt(t.km)} km · ${st.me.pos?'puesto '+st.me.pos+' en España':'aún sin clasificar'}</small></div>
  <div class="grid" style="margin-bottom:18px"><div class="card" style="margin:0"><div class="eyebrow">Liga semanal</div><div style="font-size:22px;font-weight:700;margin-top:6px">${st.me.league.tier||'Sin clasificar'}</div><small>${st.me.league.tier?`Puesto ${st.me.league.pos} de ${st.me.league.total} esta semana`:'Esquía para entrar'}</small></div><div class="card" style="margin:0"><div class="eyebrow">Racha</div><div style="font-size:22px;font-weight:700;margin-top:6px">${st.me.streak} ${st.me.streak===1?'semana':'semanas'}</div><small>${st.me.streak?'Esquía esta semana para mantenerla':'Empieza tu racha'}</small></div></div>
  ${pills(zs,st.flt,'setF')}<div class="grid">${l.map(s=>stCard(s)).join('')}</div>`},
@@ -297,9 +297,13 @@ async function shareDay(){const{s,d}=st.last,c=document.createElement('canvas');
  const K=[[d.km.toFixed(1),'km'],[d.bajadas,'bajadas'],[d.vmax.toFixed(0),'km/h máx'],[d.horas.toFixed(1)+' h','esquiando']];K.forEach((k,i)=>{const X=80+(i%2)*470,Y=1420+Math.floor(i/2)*190;g.fillStyle='#f4f5f7';g.font='700 84px system-ui';g.fillText(k[0],X,Y);g.fillStyle='#8a909c';g.font='500 38px system-ui';g.fillText(k[1],X,Y+56)});
  g.fillStyle='#8a909c';g.font='500 34px system-ui';g.fillText(st.user.alias+' · '+new Date(d.ts).toLocaleDateString('es-ES'),80,1840);
  c.toBlob(async b=>{const f=new File([b],'pistea_dia.png',{type:'image/png'});if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:'Mi día en '+s.n});return}catch(e){if(e.name==='AbortError')return}}const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='pistea_dia.png';a.click()})}
-fetch('/api/config').then(r=>r.json()).then(c=>{st.sim=!!c.sim}).catch(()=>{});
-const rt=new URLSearchParams(location.search).get('reset');
+fetch('/api/config').then(r=>r.json()).then(c=>{st.sim=!!c.sim;st.verify=!!c.verify;if(st.me)render()}).catch(()=>{});
+// Confirmar el correo: aviso en la portada mientras no se haya hecho (sin verificar no se sale en rankings ni en la comunidad)
+const verifyBanner=()=>!st.verify||!st.user||st.user.verified!==false?'':`<div class="card" style="border-color:var(--ac);margin-bottom:18px"><div class="eyebrow">Confirma tu correo</div><p style="margin:6px 0 4px">Te hemos enviado un enlace a <b>${esc(st.user.email)}</b>.</p><small>Hasta que lo confirmes, tus días cuentan para ti pero no sales en los rankings ni en la comunidad. Mira también en spam.</small><button class="btn gh" style="margin-top:12px;padding:12px" onclick="resendVerify(this)">Reenviar el correo</button></div>`;
+async function resendVerify(b){b.disabled=true;try{const r=await api('verify/resend',{body:{}});if(r.verified){await boot();return}flash('Correo enviado. Revisa tu bandeja y el spam.')}catch(e){flash(e.message);b.disabled=false}}
+const qs=new URLSearchParams(location.search),rt=qs.get('reset'),vt=qs.get('verify');
 if(rt&&/^[a-f0-9]{64}$/.test(rt)){st.resetToken=rt;st.mode='reset';st.loading=false;history.replaceState(null,'','/');render()}
+else if(vt&&/^[a-f0-9]{64}$/.test(vt)){history.replaceState(null,'','/');render();api('verify',{body:{token:vt}}).then(()=>{st.info='Correo confirmado. Ya apareces en los rankings.';flash('Correo confirmado. Ya apareces en los rankings.')}).catch(e=>{st.err=e.message;flash(e.message)}).finally(boot)}
 else{render();boot()}
 addEventListener('online',()=>{if(st.offline)boot()});
 </script></body></html>

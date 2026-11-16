@@ -36,9 +36,10 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS follows(a TEXT REFERENCES users(id) ON DELETE CASCADE, b TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(a, b))`,
   `CREATE TABLE IF NOT EXISTS audit_logs(id TEXT PRIMARY KEY, uid TEXT, action TEXT NOT NULL, ip TEXT NOT NULL, ua TEXT, details TEXT, ts INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS avatars(uid TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, updated INTEGER NOT NULL)`,
-  `CREATE TABLE IF NOT EXISTS hits(k TEXT NOT NULL, ts INTEGER NOT NULL)`];
+  `CREATE TABLE IF NOT EXISTS hits(k TEXT NOT NULL, ts INTEGER NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS verifs(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER)`];
 const ALTERS = [['users', 'avatar TEXT'], ['users', 'age INTEGER'], ['users', 'bio TEXT'], ['users', 'station_home TEXT'], ['users', "modality TEXT DEFAULT 'ski'"], ['users', "level TEXT DEFAULT 'intermedio'"],
-  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT']];
+  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER']];   // verified NULL = cuenta anterior a la verificación (se da por buena)
 const INDEXES = ['CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts)', 'CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts)',
   'CREATE INDEX IF NOT EXISTS i_tokens_uid ON tokens(uid)', 'CREATE INDEX IF NOT EXISTS i_audit_uid ON audit_logs(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_audit_ts ON audit_logs(ts)',
   'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)'];
@@ -54,17 +55,18 @@ const dbReady = () => ready || (ready = init().catch(e => { ready = null; throw 
 let lastClean = 0;
 async function housekeeping(force) {   // caducidades y retención de datos (RGPD: los registros de seguridad se guardan 180 días)
   const now = Date.now(); if (!force && now - lastClean < HOUR) return; lastClean = now;
-  await atomic([['DELETE FROM tokens WHERE exp<?', [now]], ['DELETE FROM resets WHERE exp<?', [now]], ['DELETE FROM hits WHERE ts<?', [now - DAY]], ['DELETE FROM audit_logs WHERE ts<?', [now - 180 * DAY]]]).catch(e => console.error('[limpieza]', e.message));
+  await atomic([['DELETE FROM tokens WHERE exp<?', [now]], ['DELETE FROM resets WHERE exp<?', [now]], ['DELETE FROM verifs WHERE exp<?', [now]], ['DELETE FROM hits WHERE ts<?', [now - DAY]], ['DELETE FROM audit_logs WHERE ts<?', [now - 180 * DAY]]]).catch(e => console.error('[limpieza]', e.message));
 }
 
 // ---------- estadísticas ----------
 const WIN = { hoy: DAY, semana: 7 * DAY, temporada: 365 * DAY };
 const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)', vmax: 'MAX(vmax)' };   // lista cerrada: nunca entra texto del usuario en el SQL
 const SRC = ALLOW_SIM ? '1=1' : "src!='sim'", SRC_D = ALLOW_SIM ? '1=1' : "d.src!='sim'";
-const rankRows = (metric, st, period, limit = 10) => all(`SELECT d.uid uid, u.alias alias, u.avatar avatar, ${MX[metric]} v FROM days d JOIN users u ON u.id=d.uid WHERE d.ts>=? AND (? IS NULL OR d.station=?) AND ${SRC_D} GROUP BY d.uid ORDER BY v DESC, d.uid LIMIT ?`, [Date.now() - WIN[period], st, st, limit]);
+const OK_U = 'COALESCE(u.verified,1)=1', OK_UID = c => `${c} IN (SELECT id FROM users WHERE COALESCE(verified,1)=1)`;   // ver VERIFY
+const rankRows = (metric, st, period, limit = 10, self = '') => all(`SELECT d.uid uid, u.alias alias, u.avatar avatar, ${MX[metric]} v FROM days d JOIN users u ON u.id=d.uid WHERE d.ts>=? AND (? IS NULL OR d.station=?) AND ${SRC_D} AND (${VERIFY ? OK_U : '1=1'} OR d.uid=?) GROUP BY d.uid ORDER BY v DESC, d.uid LIMIT ?`, [Date.now() - WIN[period], st, st, self, limit]);
 async function posOf(uid, metric, st, period) {
-  const r = await one(`WITH t AS (SELECT uid, ${MX[metric]} v FROM days WHERE ts>=? AND (? IS NULL OR station=?) AND ${SRC} GROUP BY uid)
-    SELECT (SELECT v FROM t WHERE uid=?) mine, (SELECT COUNT(*) FROM t WHERE v>(SELECT v FROM t WHERE uid=?))+1 pos, (SELECT COUNT(*) FROM t) total, (SELECT MIN(v) FROM t WHERE v>(SELECT v FROM t WHERE uid=?)) nxt`, [Date.now() - WIN[period], st, st, uid, uid, uid]);
+  const r = await one(`WITH t AS (SELECT uid, ${MX[metric]} v FROM days WHERE ts>=? AND (? IS NULL OR station=?) AND ${SRC} AND (${VERIFY ? OK_UID('uid') : '1=1'} OR uid=?) GROUP BY uid)
+    SELECT (SELECT v FROM t WHERE uid=?) mine, (SELECT COUNT(*) FROM t WHERE v>(SELECT v FROM t WHERE uid=?))+1 pos, (SELECT COUNT(*) FROM t) total, (SELECT MIN(v) FROM t WHERE v>(SELECT v FROM t WHERE uid=?)) nxt`, [Date.now() - WIN[period], st, st, uid, uid, uid, uid]);
   return !r || r.mine == null ? null : { pos: r.pos, v: r.mine, total: r.total, gap: r.nxt == null ? 0 : r.nxt - r.mine };
 }
 const agg = uid => one(`SELECT COALESCE(SUM(desnivel),0) desnivel, COALESCE(SUM(km),0) km, COALESCE(SUM(horas),0) horas, COALESCE(SUM(bajadas),0) bajadas, COUNT(*) dias, COALESCE(MAX(vmax),0) vmax FROM days WHERE uid=? AND ${SRC}`, [uid]);
@@ -120,7 +122,7 @@ const num = (v, max) => { v = +v; return Number.isFinite(v) ? Math.max(0, Math.m
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const normEmail = v => str(v, 254).trim().toLowerCase();
 const safeAvatar = a => typeof a === 'string' && /^\/avatars\/[a-z0-9_.]+(\?v=\d+)?$/.test(a) ? a : null;
-const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null });
+const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified });
 const audit = (uid, action, req, details = {}) => run('INSERT INTO audit_logs(id,uid,action,ip,ua,details,ts) VALUES(?,?,?,?,?,?,?)', [rid(), uid || null, action, ipOf(req), str(req.headers['user-agent'], 200), JSON.stringify(details), Date.now()]).catch(e => console.error('[auditoría]', e.message));
 
 // ---------- contraseñas: scrypt (N=32768) con sal propia; los hashes antiguos (N=16384) se renuevan al entrar ----------
@@ -139,16 +141,45 @@ function weakPw(pw, email, alias) {
   const local = email.split('@')[0]; if (l.includes(email) || (local.length >= 4 && l.includes(local)) || (alias && alias.length >= 4 && l.includes(alias.toLowerCase()))) return 'La contraseña no puede contener tu correo ni tu nombre.';
   return null;
 }
-async function sendMail(to, subject, html) {
-  if (env.RESEND_API_KEY) {
-    try { const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: env.MAIL_FROM || 'Pistea <onboarding@resend.dev>', to: [to], subject, html }) }); if (!r.ok) console.error('[correo] fallo', r.status); return r.ok; } catch (e) { console.error('[correo] fallo', e.message); return false; }
-  }
-  if (PROD) { console.error('[correo] RESEND_API_KEY sin configurar: no se ha enviado el correo'); return false; }   // en producción el enlace NUNCA va al registro
-  console.log(`[correo simulado] para ${to} · ${subject}\n${html.replace(/<a [^>]*href="([^"]+)"[^>]*>/g, '$1 ').replace(/<[^>]+>/g, ' ')}`); return true;
+// ---------- correo ----------
+// Proveedor: Brevo (BREVO_API_KEY: gratis, 300/día, basta con verificar el remitente) o Resend (RESEND_API_KEY: necesita
+// dominio propio). MAIL_FROM = "Pistea <remitente@...>". Sin proveedor: en local se escribe en la consola; en producción no se envía.
+const MAIL_READY = !!(env.BREVO_API_KEY || env.RESEND_API_KEY);
+const VERIFY = MAIL_READY || !PROD;   // sin correo en producción no se puede exigir la verificación (nadie podría verificarse)
+const FROM = (() => { const m = String(env.MAIL_FROM || '').match(/^\s*(.*?)\s*<([^>]+)>\s*$/); return m ? { name: m[1] || 'Pistea', email: m[2] } : { name: 'Pistea', email: env.MAIL_FROM || 'onboarding@resend.dev' }; })();
+const htmlEsc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function mail(title, intro, cta, link, outro) {
+  const html = `<!doctype html><html lang="es"><body style="margin:0;background:#f4f5f7;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#111"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:14px;padding:28px">
+<tr><td style="font-size:12px;letter-spacing:.22em;font-weight:700">PISTEA</td></tr><tr><td style="padding-top:18px;font-size:22px;font-weight:700">${htmlEsc(title)}</td></tr>
+<tr><td style="padding-top:10px;font-size:15px;line-height:1.55;color:#333">${htmlEsc(intro)}</td></tr>
+<tr><td style="padding:24px 0"><a href="${htmlEsc(link)}" style="background:#0b0c0f;color:#fff;text-decoration:none;padding:13px 22px;border-radius:10px;font-weight:600;display:inline-block">${htmlEsc(cta)}</a></td></tr>
+<tr><td style="font-size:12.5px;color:#666;line-height:1.55">${htmlEsc(outro)}<br><br>Si el botón no funciona, copia este enlace en el navegador:<br><span style="word-break:break-all">${htmlEsc(link)}</span></td></tr>
+</table><p style="font-size:11.5px;color:#999">Recibes este correo porque alguien usó esta dirección en Pistea.</p></td></tr></table></body></html>`;
+  return { html, text: `${title}\n\n${intro}\n\n${cta}: ${link}\n\n${outro}` };
+}
+async function sendMail(to, subject, { html, text }) {
+  try {
+    if (env.BREVO_API_KEY) {
+      const r = await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ sender: FROM, to: [{ email: to }], subject, htmlContent: html, textContent: text }) });
+      if (!r.ok) console.error('[correo] Brevo', r.status, (await r.text()).slice(0, 200)); return r.ok;
+    }
+    if (env.RESEND_API_KEY) {
+      const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: `${FROM.name} <${FROM.email}>`, to: [to], subject, html, text }) });
+      if (!r.ok) console.error('[correo] Resend', r.status, (await r.text()).slice(0, 200)); return r.ok;
+    }
+  } catch (e) { console.error('[correo] fallo', e.message); return false; }
+  if (PROD) { console.error('[correo] sin BREVO_API_KEY ni RESEND_API_KEY: no se ha enviado'); return false; }   // en producción el enlace NUNCA va al registro
+  console.log(`[correo simulado] para ${to} · ${subject}\n${text}`); return true;
+}
+async function sendVerify(u) {
+  const t = crypto.randomBytes(32).toString('hex'), link = `${APP_URL}/?verify=${t}`;
+  await atomic([['DELETE FROM verifs WHERE uid=?', [u.id]], ['INSERT INTO verifs(th,uid,exp) VALUES(?,?,?)', [sha(t), u.id, Date.now() + 2 * DAY]]]);
+  return sendMail(u.email, 'Confirma tu correo en Pistea', mail(`Hola, ${u.alias}`, 'Confirma que este correo es tuyo para aparecer en los rankings y en la comunidad de Pistea.', 'Confirmar mi correo', link, 'El enlace caduca en 48 horas. Si no has creado una cuenta en Pistea, ignora este correo.'));
 }
 
 // ---------- API ----------
-const PUB = new Set(['POST /api/register', 'POST /api/login', 'POST /api/forgot', 'POST /api/reset', 'GET /api/config', 'POST /api/logout']);
+const PUB = new Set(['POST /api/register', 'POST /api/login', 'POST /api/forgot', 'POST /api/reset', 'GET /api/config', 'POST /api/logout', 'POST /api/verify']);
 const routes = {
   'POST /api/register': async ({ req, res, b }) => {
     if (await limited('reg:' + ipOf(req), 10, HOUR)) return send(res, 429, { error: 'Demasiados registros desde esta conexión. Inténtalo más tarde.' });
@@ -162,9 +193,11 @@ const routes = {
     if (b.age !== undefined && b.age !== null && b.age !== '') { age = parseInt(b.age, 10); if (!Number.isFinite(age) || age < 14 || age > 120) return send(res, 400, { error: 'En España la edad mínima para registrarse son 14 años (art. 7 LOPDGDD 3/2018).' }); }
     if (await one('SELECT 1 x FROM users WHERE email=?', [e])) return send(res, 409, { error: 'Ese correo ya tiene cuenta. Entra con tu contraseña o recupérala.' });
     const { salt, hash } = await hashPw(pw), now = Date.now(), u = { id: rid(), email: e, alias: a, age, terms_accepted_at: now, created: now };
-    try { await run('INSERT INTO users(id,email,alias,salt,hash,age,terms_accepted_at,created,updated_at) VALUES(?,?,?,?,?,?,?,?,?)', [u.id, e, a, salt, hash, age, now, now, now]); }
+    u.verified = 0;
+    try { await run('INSERT INTO users(id,email,alias,salt,hash,age,terms_accepted_at,created,updated_at,verified) VALUES(?,?,?,?,?,?,?,?,?,0)', [u.id, e, a, salt, hash, age, now, now, now]); }
     catch (err) { if (/UNIQUE/i.test(err.message)) return send(res, 409, { error: 'Ese correo ya tiene cuenta. Entra con tu contraseña o recupérala.' }); throw err; }
     setSession(req, res, await newToken(u, req)); await audit(u.id, 'REGISTER', req);
+    if (VERIFY) await sendVerify(u);
     send(res, 200, { user: clean(u) });
   },
   'POST /api/login': async ({ req, res, b }) => {
@@ -186,7 +219,7 @@ const routes = {
     if (u) {   // se envía ANTES de responder: en Vercel lo que va después de la respuesta se corta
       const t = crypto.randomBytes(32).toString('hex'), link = `${APP_URL}/?reset=${t}`;
       await atomic([['DELETE FROM resets WHERE uid=?', [u.id]], ['INSERT INTO resets(th,uid,exp) VALUES(?,?,?)', [sha(t), u.id, Date.now() + HOUR]]]);
-      await sendMail(e, 'Recupera tu contraseña de Pistea', `<p>Hola ${u.alias.replace(/[<>&"]/g, '')},</p><p>Para crear una contraseña nueva entra aquí (caduca en 1 hora):</p><p><a href="${link}">${link}</a></p><p>Si no lo has pedido tú, ignora este correo: tu contraseña no cambia.</p>`);
+      await sendMail(e, 'Recupera tu contraseña de Pistea', mail(`Hola, ${u.alias}`, 'Has pedido crear una contraseña nueva para tu cuenta de Pistea.', 'Crear contraseña nueva', link, 'El enlace caduca en 1 hora y sirve una sola vez. Si no lo has pedido tú, ignora este correo: tu contraseña no cambia.'));
       await audit(u.id, 'PASSWORD_RESET_REQUEST', req);
     } else await new Promise(r => setTimeout(r, 150 + Math.random() * 250));
     send(res, 200, { ok: true });   // misma respuesta exista o no el correo
@@ -207,6 +240,19 @@ const routes = {
     const n = await hashPw(pw);
     await atomic([['UPDATE users SET salt=?, hash=?, updated_at=? WHERE id=?', [n.salt, n.hash, Date.now(), u.id]], ['DELETE FROM tokens WHERE uid=? AND th!=?', [u.id, u.kth]]]);   // cierra las demás sesiones
     await audit(u.id, 'PASSWORD_CHANGE', req); send(res, 200, { ok: true });
+  },
+  'POST /api/verify': async ({ req, res, b }) => {   // el enlace del correo
+    if (await limited('vf:' + ipOf(req), 20, HOUR)) return send(res, 429, { error: 'Demasiados intentos.' });
+    const v = await one('SELECT uid FROM verifs WHERE th=? AND exp>?', [sha(str(b.token, 100)), Date.now()]);
+    if (!v) return send(res, 400, { error: 'El enlace no es válido o ha caducado. Pide otro desde tu perfil.' });
+    await atomic([['UPDATE users SET verified=1, updated_at=? WHERE id=?', [Date.now(), v.uid]], ['DELETE FROM verifs WHERE uid=?', [v.uid]]]);
+    stationsCache.t = 0; await audit(v.uid, 'EMAIL_VERIFIED', req); send(res, 200, { ok: true });
+  },
+  'POST /api/verify/resend': async ({ req, res, u }) => {
+    if (u.verified === null || u.verified) return send(res, 200, { ok: true, verified: true });
+    if (await limited('vr:' + u.id, 3, HOUR)) return send(res, 429, { error: 'Ya te hemos mandado varios correos. Revisa también la carpeta de spam o inténtalo en una hora.' });
+    if (!(await sendVerify(u))) return send(res, 503, { error: 'No se ha podido enviar el correo. Inténtalo más tarde.' });
+    send(res, 200, { ok: true });
   },
   'POST /api/logout': async ({ req, res }) => { const t = tokenOf(req); if (t) await run('DELETE FROM tokens WHERE th=?', [sha(t)]); clearSession(req, res); send(res, 200, { ok: true }); },
   'POST /api/logout-all': async ({ req, res, u }) => { await run('DELETE FROM tokens WHERE uid=?', [u.id]); clearSession(req, res); await audit(u.id, 'LOGOUT_ALL', req); send(res, 200, { ok: true }); },
@@ -267,19 +313,19 @@ const routes = {
     if (await limited('del:' + u.id, 10, HOUR)) return send(res, 429, { error: 'Demasiados intentos. Inténtalo más tarde.' });
     if (!(await checkPw(str(b.password, 200), u))) return send(res, 403, { error: 'Contraseña incorrecta.' });
     await atomic([['DELETE FROM kudos WHERE uid=? OR day IN (SELECT id FROM days WHERE uid=?)', [u.id, u.id]], ['DELETE FROM follows WHERE a=? OR b=?', [u.id, u.id]],
-      ['DELETE FROM days WHERE uid=?', [u.id]], ['DELETE FROM tokens WHERE uid=?', [u.id]], ['DELETE FROM resets WHERE uid=?', [u.id]], ['DELETE FROM avatars WHERE uid=?', [u.id]],
+      ['DELETE FROM days WHERE uid=?', [u.id]], ['DELETE FROM tokens WHERE uid=?', [u.id]], ['DELETE FROM resets WHERE uid=?', [u.id]], ['DELETE FROM verifs WHERE uid=?', [u.id]], ['DELETE FROM avatars WHERE uid=?', [u.id]],
       ['DELETE FROM audit_logs WHERE uid=?', [u.id]], ['DELETE FROM users WHERE id=?', [u.id]]]);
     await audit(u.id, 'ACCOUNT_DELETION', req);   // solo queda constancia del borrado, sin datos personales
     clearSession(req, res); send(res, 200, { ok: true });
   },
   'GET /api/rank': async ({ res, u, q }) => {
     const metric = MX[q.get('metric')] ? q.get('metric') : 'desnivel', period = WIN[q.get('period')] ? q.get('period') : 'temporada', st = SID.has(q.get('station')) ? q.get('station') : null;
-    const [rows, me] = await Promise.all([rankRows(metric, st, period), posOf(u.id, metric, st, period)]);
+    const [rows, me] = await Promise.all([rankRows(metric, st, period, 10, u.id), posOf(u.id, metric, st, period)]);
     send(res, 200, { rows: rows.map((x, k) => ({ pos: k + 1, alias: x.alias, avatar: safeAvatar(x.avatar), v: x.v, me: x.uid === u.id })), me: me && { pos: me.pos, v: me.v }, gap: me ? me.gap : 0, total: me ? me.total : rows.length });
   },
   'GET /api/stations': async ({ res }) => {
     if (Date.now() - stationsCache.t > MIN || !stationsCache.v) {
-      const cnt = Object.fromEntries((await all(`SELECT station s, COUNT(DISTINCT uid) n FROM days WHERE ts>=? AND ${SRC} GROUP BY station`, [Date.now() - WIN.temporada])).map(r => [r.s, r.n]));
+      const cnt = Object.fromEntries((await all(`SELECT station s, COUNT(DISTINCT uid) n FROM days WHERE ts>=? AND ${SRC} AND ${VERIFY ? OK_UID('uid') : '1=1'} GROUP BY station`, [Date.now() - WIN.temporada])).map(r => [r.s, r.n]));
       const out = {};
       await Promise.all(STATIONS.map(async ([id]) => { out[id] = { skiers: cnt[id] || 0, leaders: cnt[id] ? (await rankRows('desnivel', id, 'temporada', 3)).map(x => ({ alias: x.alias, v: x.v })) : [] }; }));
       stationsCache = { t: Date.now(), v: out };
@@ -290,7 +336,7 @@ const routes = {
     const onlyF = q.get('scope') === 'amigos' ? 1 : 0;
     const rows = await all(`SELECT d.id id, d.uid uid, d.station station, d.ts ts, d.desnivel desnivel, d.km km, d.bajadas bajadas, d.vmax vmax, d.track track, u.alias alias, u.avatar avatar,
       (SELECT COUNT(*) FROM kudos k WHERE k.day=d.id) kudos, EXISTS(SELECT 1 FROM kudos k WHERE k.day=d.id AND k.uid=?) liked
-      FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, onlyF, u.id, u.id]);
+      FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${VERIFY ? OK_U : '1=1'} OR d.uid=?) AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, onlyF, u.id, u.id]);
     send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: J(d.track), liked: !!d.liked })));
   },
   'POST /api/days': async ({ res, u, b }) => {
@@ -312,7 +358,7 @@ const routes = {
   'GET /api/users': async ({ res, u, q }) => {
     const s = str(q.get('q'), 40).trim().toLowerCase().replace(/[%_\\]/g, '');
     if (s.length < 2) return send(res, 200, []);
-    const rows = await all('SELECT id, alias, avatar, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=users.id) following FROM users WHERE id!=? AND lower(alias) LIKE ? ORDER BY alias LIMIT 10', [u.id, u.id, `%${s}%`]);
+    const rows = await all(`SELECT id, alias, avatar, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=u.id) following FROM users u WHERE id!=? AND ${VERIFY ? OK_U : '1=1'} AND lower(alias) LIKE ? ORDER BY alias LIMIT 10`, [u.id, u.id, `%${s}%`]);
     send(res, 200, rows.map(x => ({ ...x, avatar: safeAvatar(x.avatar), following: !!x.following })));
   },
   'POST /api/follow': async ({ res, u, b }) => {
@@ -322,11 +368,12 @@ const routes = {
     send(res, 200, { following: !had });
   },
   'GET /api/user': async ({ res, u, q }) => {
-    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created FROM users WHERE id=?', [str(q.get('id'), 40)]); if (!t) return send(res, 404, { error: 'No existe.' });
+    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified FROM users WHERE id=?', [str(q.get('id'), 40)]);
+    if (!t || (VERIFY && t.verified === 0 && t.id !== u.id)) return send(res, 404, { error: 'No existe.' });
     const me = t.id === u.id;
     const [totals, stations, days, pos, stk, followers, following] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT station, ts, desnivel, bajadas, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
       posOf(t.id, 'desnivel', null, 'temporada'), streak(t.id), count('SELECT COUNT(*) n FROM follows WHERE b=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, t.id])]);
-    send(res, 200, { ...t, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
+    delete t.verified; send(res, 200, { ...t, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
   },
   'POST /api/kudos': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
@@ -334,7 +381,7 @@ const routes = {
     const had = (await run('DELETE FROM kudos WHERE day=? AND uid=?', [id, u.id])).rowsAffected; if (!had) await run('INSERT OR IGNORE INTO kudos(day,uid) VALUES(?,?)', [id, u.id]);
     send(res, 200, { kudos: await count('SELECT COUNT(*) n FROM kudos WHERE day=?', [id]), liked: !had });
   },
-  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM })
+  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY })
 };
 
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------

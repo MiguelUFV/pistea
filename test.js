@@ -20,6 +20,8 @@ const browser = () => {
   call.jar = jar; return call;
 };
 const day = (o = {}) => ({ station: 'valdesqui', desnivel: 9000, km: 45, horas: 4, bajadas: 20, vmax: 80, vmed: 30, col: { v: 5, a: 6, r: 8, n: 1 }, track: [[0, 0], [5, 5]], speed: [10, 20], source: 'sim', ...o });
+// Último enlace (verify o reset) que el servidor «mandó» por correo a esa dirección (en local se escribe en la consola)
+const linkFor = (email, kind) => { const i = out.lastIndexOf('[correo simulado] para ' + email); if (i < 0) return null; const m = out.slice(i).match(new RegExp('\\?' + kind + '=([a-f0-9]{64})')); return m && m[1]; };
 const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana Test', terms: true };
 (async () => {
   await start();
@@ -39,6 +41,28 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('cookie HttpOnly y SameSite', /HttpOnly/.test(A.last) && /SameSite=Lax/.test(A.last));
   t('correo duplicado (mayúsculas)', (await A('POST', '/api/register', { ...REG, email: 'ANA@pistea.es' }))[0] === 409);
   t('sesión con la cookie', (await A('GET', '/api/me'))[1].user?.alias === 'Ana Test');
+  // --- verificación del correo
+  t('nace sin verificar', j.user.verified === false);
+  const VA = linkFor('ana@pistea.es', 'verify'); t('correo de verificación enviado', !!VA);
+  t('verificar con enlace falso', (await browser()('POST', '/api/verify', { token: 'f'.repeat(64) }))[0] === 400);
+  t('verificar', (await browser()('POST', '/api/verify', { token: VA }))[0] === 200);
+  t('el enlace sirve una vez', (await browser()('POST', '/api/verify', { token: VA }))[0] === 400);
+  t('ya verificada', (await A('GET', '/api/me'))[1].user.verified === true);
+  t('reenviar estando verificada', (await A('POST', '/api/verify/resend'))[1].verified === true);
+  const Bx = browser(); await Bx('POST', '/api/register', { email: 'bea@pistea.es', password: 'Bea-Esquia-Mucho', alias: 'Bea Oculta', terms: true });
+  await Bx('POST', '/api/days', day({ desnivel: 30000, bajadas: 40 }));
+  const beaId = (await Bx('GET', '/api/me'))[1].user.id;
+  t('sin verificar: fuera del ranking de los demás', !(await A('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta'));
+  t('…pero se ve a sí misma', (await Bx('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta' && r.me));
+  t('sin verificar: fuera de la búsqueda', (await A('GET', '/api/users?q=bea'))[1].length === 0);
+  t('sin verificar: perfil no visible', (await A('GET', '/api/user?id=' + beaId))[0] === 404);
+  t('sin verificar: fuera de la comunidad', !(await A('GET', '/api/feed?scope=todos'))[1].some(d => d.alias === 'Bea Oculta'));
+  t('reenviar verificación', (await Bx('POST', '/api/verify/resend'))[0] === 200);
+  for (let i = 0; i < 2; i++) await Bx('POST', '/api/verify/resend');
+  t('límite de reenvíos', (await Bx('POST', '/api/verify/resend'))[0] === 429);
+  await browser()('POST', '/api/verify', { token: linkFor('bea@pistea.es', 'verify') });
+  t('verificada: ya sale en el ranking', (await A('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta'));
+  t('config dice si se exige verificar', (await A('GET', '/api/config'))[1].verify === true);
   // --- persistencia: se reinicia el servidor y la cuenta, la sesión y los datos siguen ahí
   await A('POST', '/api/days', day());
   await stop(); await start();
@@ -90,7 +114,7 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   // --- recuperar contraseña
   t('forgot correo inexistente (misma respuesta)', (await browser()('POST', '/api/forgot', { email: 'no@existe.es' }))[0] === 200);
   t('forgot', (await browser()('POST', '/api/forgot', { email: 'ana@pistea.es' }))[0] === 200);
-  const m = out.match(/\?reset=([a-f0-9]{64})/); t('correo con enlace (antes de responder)', !!m); const R = m && m[1];
+  const R = linkFor('ana@pistea.es', 'reset'); t('correo con enlace (antes de responder)', !!R);
   const X = browser();
   t('reset token malo', (await X('POST', '/api/reset', { token: 'x', password: 'Otra-Clave-Larga-1' }))[0] === 400);
   t('reset contraseña débil', (await X('POST', '/api/reset', { token: R, password: '11111111' }))[0] === 400);
