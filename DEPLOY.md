@@ -1,27 +1,28 @@
 # Pistea · puesta en producción
 
-## 1. Qué necesitas
-- Un servidor (VPS) con Docker y un **dominio** apuntando a su IP (registro A).
-- Una cuenta en [Resend](https://resend.com) (gratis hasta 3.000 correos/mes) para el correo de recuperación de contraseña. Verifica tu dominio y crea una API key.
-- Los mapas 3D ya van en el repositorio (`mapas/`, ≈ 780 MB) y se copian a la imagen de Docker: no hay que subirlos aparte.
+## 1. Dónde se guardan los datos
+- **Base de datos: Turso (libSQL)**, persistente, con copias automáticas y conexión cifrada (TLS). El servidor crea y pone al día las tablas solo al arrancar.
+- Variables: `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN` (ver `.env.example`). **En Vercel son obligatorias**: el disco de Vercel es temporal y, sin Turso, la API responde 503 en vez de perder cuentas.
+- En local, sin esas variables, se usa un fichero `pistea.sqlite` (o el de `DATA_DIR`). Las pruebas usan siempre una BD temporal, nunca la de producción.
+- Las fotos de perfil van dentro de la BD (≤ 400 KB, reducidas a 300×300 en el móvil).
 
-## 2. Configuración
+## 2. Vercel (lo que hay ahora)
+- `vercel.json` manda todo a `server.js` e incluye `public/`. Variables en el panel de Vercel: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `RESEND_API_KEY`, `MAIL_FROM` (y `APP_URL` si el dominio no es el de producción de Vercel).
+- **Mapas 3D**: la carpeta `mapas/` (≈ 780 MB) no cabe en una función de Vercel (límite 250 MB): hay que servirla aparte (almacenamiento estático o CDN) y apuntar el iframe a esa dirección. Sin eso, la ficha no enseña el 3D en Vercel.
+- El plan gratuito de Vercel no permite uso comercial: para lanzar, plan Pro o servidor propio.
+
+## 3. Servidor propio con Docker (alternativa)
 ```
-cp .env.example .env      # y rellena DOMAIN, APP_URL, RESEND_API_KEY, MAIL_FROM
+cp .env.example .env      # rellena DOMAIN, APP_URL, TURSO_*, RESEND_API_KEY, MAIL_FROM y descomenta TRUST_PROXY=1
 docker compose up -d --build
 ```
-- **HTTPS**: lo da Caddy solo, con certificado de Let's Encrypt, en cuanto el dominio apunta al servidor (puertos 80 y 443 abiertos). El servidor de Pistea redirige a HTTPS y manda HSTS.
-- **Base de datos**: SQLite en el volumen `datos` (`pistea.sqlite`, modo WAL). **Copia de seguridad**: `docker compose exec pistea node -e "const{DatabaseSync}=require('node:sqlite');new DatabaseSync('/data/pistea.sqlite').exec(\"VACUUM INTO '/data/copia.sqlite'\")"` y guarda `copia.sqlite` fuera del servidor (cron diario).
-- **Producción** (`NODE_ENV=production`): no se crean usuarios de ejemplo y se **desactiva la simulación**: solo cuentan días grabados con el GPS real.
-- Sin `RESEND_API_KEY` el enlace de recuperación solo sale en el log (`docker compose logs pistea`): vale para pruebas, no para usuarios.
+- **HTTPS** con Caddy y Let's Encrypt en cuanto el dominio apunta al servidor (puertos 80 y 443). Pistea redirige a HTTPS y manda HSTS.
+- Sin Turso, la BD es `/data/pistea.sqlite` en el volumen `datos`: haz copia diaria fuera del servidor.
 
-## 3. Antes de abrirlo al público
-- Texto legal: política de privacidad y condiciones (la ubicación es un dato personal, RGPD). La cuenta ya se puede borrar desde Perfil.
-- Permiso de las estaciones para usar su nombre y marca en la app.
-- Cuando haya miles de usuarios: pasar de SQLite a PostgreSQL (el SQL de `server.js` es estándar salvo `random()` y `INSERT OR IGNORE`), y Redis para los límites de intentos si hay varias réplicas.
-- Pruebas: `node --no-warnings test.js` (46 comprobaciones, usa una BD temporal).
+## Antes de abrirlo al público
+Ver la lista de `SEGURIDAD.md` («Antes de publicar»). Pruebas: `npm test` (69 comprobaciones; levanta el servidor con una BD temporal y lo reinicia para comprobar que nada se pierde).
 
-## 4. App de Android (`app/`)
+## App de Android (`app/`)
 La app es un envoltorio de Capacitor que carga Pistea desde tu servidor y añade el **grabador GPS nativo** (el mismo de «Mi día»): una posición por segundo, apuntada en un fichero del teléfono, con un servicio en primer plano. Sigue grabando con la pantalla apagada o la app cerrada, y el día se recupera desde el aviso de la portada.
 ```
 cd app

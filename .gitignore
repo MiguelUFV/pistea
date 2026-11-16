@@ -10,3 +10,6 @@ avatars/*
 !avatars/.gitkeep
 
 .vercel
+
+.env*.local
+__pycache__/
