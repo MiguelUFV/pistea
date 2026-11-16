@@ -13,3 +13,4 @@ avatars/*
 
 .env*.local
 __pycache__/
+scripts/.fotos_candidatas.json

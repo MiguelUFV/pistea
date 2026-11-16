@@ -521,6 +521,7 @@ async function handler(req, res) {
     if (url.pathname.startsWith('/avatars/')) return await serveAvatar(req, res, url.pathname.slice(9));
     if (url.pathname === '/calc.js' || url.pathname === '/app.js') return serveFile(req, res, path.join(__dirname, 'public'), url.pathname.slice(1), 'no-cache');   // se revalidan siempre: nunca una versión vieja con una página nueva
     if (url.pathname.startsWith('/img/')) return serveFile(req, res, path.join(__dirname, 'public', 'img'), url.pathname.slice(4));
+    if (/^\/fonts\/[A-Za-z0-9-]+\.woff2$/.test(url.pathname)) return serveFile(req, res, path.join(__dirname, 'public', 'fonts'), url.pathname.slice(6), 'public, max-age=31536000, immutable');   // Barlow (licencia OFL)
     if (url.pathname === '/3d') { res.writeHead(301, { Location: '/3d/' + url.search }); return res.end(); }
     if (url.pathname.startsWith('/3d/')) return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
     if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#0b0c0f', theme_color: '#0b0c0f', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
