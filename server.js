@@ -2,7 +2,7 @@
 // SQLite en local. Sesiones en cookie HttpOnly. Ver DEPLOY.md (despliegue) y SEGURIDAD.md (auditoría y decisiones).
 'use strict';
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
-const { promisify } = require('util'), { createClient } = require('@libsql/client');
+const { promisify } = require('util'), { createClient } = require('@libsql/client'), { legal, LEGAL_HEADERS } = require('./legal');
 const env = process.env, PORT = +env.PORT || 3000, PROD = env.NODE_ENV === 'production', VERCEL = !!env.VERCEL, TRUST = env.TRUST_PROXY === '1';
 const APP_URL = (env.APP_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + env.VERCEL_PROJECT_PRODUCTION_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 const DATA = env.DATA_DIR || __dirname, AVATARS_DIR = path.join(DATA, 'avatars');
@@ -500,6 +500,8 @@ async function handler(req, res) {
     if (url.pathname.startsWith('/3d/')) return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
     if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#0b0c0f', theme_color: '#0b0c0f', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
     if (url.pathname === '/icon.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0b0c0f"/><path d="M14 74l24-40 16 24 12-16 20 32z" fill="none" stroke="#f4f5f7" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>'); }
+    const lp = /^\/(privacidad|condiciones|normas|borrar-cuenta)\/?$/.exec(url.pathname);
+    if (lp) { res.writeHead(200, LEGAL_HEADERS); return res.end(legal(lp[1], env)); }
     if (url.pathname === '/healthz') { if (DB_ERR) return send(res, 503, { ok: false }); await dbReady(); await run('SELECT 1'); return send(res, 200, { ok: true }); }
     res.writeHead(200, PAGE_HEADERS); res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
   } catch (e) {

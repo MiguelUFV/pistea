@@ -2,7 +2,7 @@ FROM node:24-slim
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-COPY server.js ./
+COPY server.js legal.js ./
 COPY public ./public
 COPY mapas ./mapas
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data MAPS_DIR=/app/mapas TRUST_PROXY=1

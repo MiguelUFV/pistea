@@ -2,7 +2,7 @@
 // la API como lo haría el navegador: cookie de sesión, cabecera anti-CSRF y reinicios. Uso: node --no-warnings test.js
 const { spawn } = require('child_process'), fs = require('fs'), os = require('os'), path = require('path'), crypto = require('crypto');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pistea-')), PORT = 3199, B = `http://localhost:${PORT}`;
-const ENV = { ...process.env, PORT, DATA_DIR: dir, NODE_ENV: 'test', ADMIN_EMAILS: 'admin@pistea.es' }; delete ENV.TURSO_DATABASE_URL; delete ENV.TURSO_AUTH_TOKEN; delete ENV.VERCEL; delete ENV.RESEND_API_KEY;
+const ENV = { ...process.env, PORT, DATA_DIR: dir, NODE_ENV: 'test', ADMIN_EMAILS: 'admin@pistea.es', LEGAL_NAME: 'Persona De Prueba', LEGAL_EMAIL: 'legal@pistea.es' }; delete ENV.TURSO_DATABASE_URL; delete ENV.TURSO_AUTH_TOKEN; delete ENV.VERCEL; delete ENV.RESEND_API_KEY;
 let p, out = '';
 const start = () => new Promise(r => { p = spawn(process.execPath, ['--no-warnings', 'server.js'], { cwd: __dirname, env: ENV }); p.stdout.on('data', d => { out += d; if (/Pistea en/.test(d)) setTimeout(r, 300); }); p.stderr.on('data', d => out += d); });
 const stop = () => new Promise(r => { p.once('exit', r); p.kill(); });
@@ -183,6 +183,11 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   r = await fetch(B + '/3d/../server.js'); t('sin salida de carpeta (..)', !/createClient/.test(await r.text()));
   r = await fetch(B + '/3d/%2e%2e/%2e%2e/server.js'); t('sin salida codificada', !/createClient/.test(await r.text()));
   r = await fetch(B + '/avatars/..%2f..%2fserver.js'); t('fotos: sin salida de carpeta', r.status === 404);
+  for (const [p, h] of [['/privacidad', 'Política de privacidad'], ['/condiciones', 'Condiciones de uso'], ['/normas', 'Normas de la comunidad'], ['/borrar-cuenta', 'Borrar tu cuenta']]) {
+    r = await fetch(B + p); const html = await r.text();
+    t('página legal ' + p, r.status === 200 && html.includes(h) && (p === '/normas' || html.includes('legal@pistea.es')) && (!['/privacidad', '/condiciones'].includes(p) || html.includes('Persona De Prueba')) && !html.includes('[falta') && /default-src 'none'/.test(r.headers.get('content-security-policy')));
+  }
+  t('privacidad cita encargados y AEPD', /Turso/.test(await (await fetch(B + '/privacidad')).text()) );
   t('salud con BD', (await (await fetch(B + '/healthz')).json()).ok === true);
   // --- borrar la cuenta (derecho de supresión)
   t('borrar cuenta pide contraseña', (await A('DELETE', '/api/me', { password: 'mala' }))[0] === 403);
