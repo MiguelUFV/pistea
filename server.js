@@ -228,8 +228,8 @@ const routes = {
     if (b.age !== undefined && b.age !== null && b.age !== '') { age = parseInt(b.age, 10); if (!Number.isFinite(age) || age < 14 || age > 120) return send(res, 400, { error: 'En España la edad mínima para registrarse son 14 años (art. 7 LOPDGDD 3/2018).' }); }
     if (await one('SELECT 1 x FROM users WHERE email=?', [e])) return send(res, 409, { error: 'Ese correo ya tiene cuenta. Entra con tu contraseña o recupérala.' });
     const { salt, hash } = await hashPw(pw), now = Date.now(), u = { id: rid(), email: e, alias: a, age, terms_accepted_at: now, created: now };
-    u.verified = 0;
-    try { await run('INSERT INTO users(id,email,alias,salt,hash,age,terms_accepted_at,created,updated_at,verified) VALUES(?,?,?,?,?,?,?,?,?,0)', [u.id, e, a, salt, hash, age, now, now, now]); }
+    u.verified = VERIFY ? 0 : null;   // sin correo configurado no se puede verificar: la cuenta se da por buena (no se esconde al activarlo)
+    try { await run('INSERT INTO users(id,email,alias,salt,hash,age,terms_accepted_at,created,updated_at,verified) VALUES(?,?,?,?,?,?,?,?,?,?)', [u.id, e, a, salt, hash, age, now, now, now, u.verified]); }
     catch (err) { if (/UNIQUE/i.test(err.message)) return send(res, 409, { error: 'Ese correo ya tiene cuenta. Entra con tu contraseña o recupérala.' }); throw err; }
     await hit('reg:' + ipOf(req));
     setSession(req, res, await newToken(u, req)); await audit(u.id, 'REGISTER', req);

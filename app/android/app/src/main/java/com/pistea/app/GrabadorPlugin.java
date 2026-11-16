@@ -183,18 +183,14 @@ public class GrabadorPlugin extends Plugin implements GrabadorService.Listener {
         call.resolve();
     }
 
-    // Que el ahorro de batería no duerma la grabación: Android pregunta con su propio diálogo
+    // Que el ahorro de batería no duerma la grabación: abre la lista de Ajustes para que el usuario quite Pistea. No se usa el
+    // diálogo directo (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS): exige un permiso que Google Play solo admite en casos tasados.
     @PluginMethod
     public void battery(PluginCall call) {
         Context c = getContext();
         PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
-        if (pm != null && !pm.isIgnoringBatteryOptimizations(c.getPackageName())) {
-            try {
-                getActivity().startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + c.getPackageName())));
-            } catch (Exception e) {
-                getActivity().startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-            }
-        }
+        if (pm != null && !pm.isIgnoringBatteryOptimizations(c.getPackageName()))
+            getActivity().startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
         call.resolve();
     }
 

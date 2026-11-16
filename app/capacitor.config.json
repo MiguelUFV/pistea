@@ -3,13 +3,19 @@
   "appName": "Pistea",
   "webDir": "www",
   "server": {
-    "url": "http://10.0.2.2:3000",
-    "cleartext": true,
+    "url": "https://pistea.vercel.app",
+    "cleartext": false,
     "allowNavigation": [
-      "10.0.2.2:3000"
+      "pistea.vercel.app"
     ]
   },
+  "backgroundColor": "#0b0c0f",
   "android": {
     "useLegacyBridge": true
+  },
+  "plugins": {
+    "SystemBars": {
+      "style": "DARK"
+    }
   }
 }
