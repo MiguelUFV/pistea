@@ -68,6 +68,7 @@ input{width:100%;background:var(--s1);border:1px solid var(--ln);border-radius:1
 .link{background:none;border:0;color:var(--ac);font:inherit;cursor:pointer;padding:0}
 .empty{text-align:center;color:var(--mu);padding:30px 10px;border:1px dashed var(--ln);border-radius:14px}
 </style></head><body><div id="app"><main id="m"></main><nav id="nav"></nav></div>
+<script src="/calc.js"></script>
 <script>
 const $=s=>document.querySelector(s),fmt=n=>Math.round(n).toLocaleString('es-ES');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -231,7 +232,6 @@ function run(s){let t=0,v=0,max=0,desc=0,bj=0,sum=0,ns=0,col={v:0,a:0,r:0,n:0},p
   $('#sp').textContent=Math.round(v);$('#k1').textContent=fmt(desc);$('#k2').textContent=bj;$('#k3').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0')},500);
  $('#fin').onclick=()=>{clearInterval(T);const d=desc*18+4000,k={v:col.v+4,a:col.a+5,r:col.r+4,n:col.n+1};saveDay(s,{station:s.id,desnivel:d,km:d/190,horas:3.4+Math.random(),bajadas:bj+12,vmax:Math.max(max,62),vmed:ns?sum/ns:30,col:k,track:tr,speed:sp,source:'sim'},$('#fin'))}}
 async function saveDay(s,body,btn,after){btn.disabled=true;btn.textContent='Guardando…';try{const r=await api('days',{body});if(after)after();await refresh();resumen(s,r)}catch(e){btn.disabled=false;btn.textContent='Reintentar guardado';flash(e.message)}}
-const downs=(a,n)=>a.length<=n?a:Array.from({length:n},(_,i)=>a[Math.round(i*(a.length-1)/(n-1))]);
 // ---- Grabación real. En la app de Android la hace el grabador nativo (sigue con el teléfono bloqueado y apunta cada posición en un
 // fichero); en un navegador, el GPS de la página. Las posiciones se guardan en el dispositivo mientras dura el día: si la app
 // se cierra, se queda sin batería o falla la subida, el día se recupera desde el aviso de la portada.
@@ -239,23 +239,9 @@ const NAT=window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.
 const REC='pistea_rec',recLoad=()=>{try{return JSON.parse(localStorage.getItem(REC))}catch(e){return null}},recSave=r=>{try{localStorage.setItem(REC,JSON.stringify(r))}catch(e){}},recClear=()=>{try{localStorage.removeItem(REC)}catch(e){}};
 const stopW=()=>{if(W){const f=W;W=null;try{f()}catch(e){}}curSave=null};
 addEventListener('pagehide',()=>{if(curSave)curSave()});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&curSave)curSave()});
-const parseNat=row=>{const[t,lat,lon,acc,v,,,,alt]=row.split(','),n=x=>x===''||x===undefined?null:+x;if(n(lat)==null||n(lon)==null||n(t)==null)return null;return{t:+t,lat:+lat,lon:+lon,alt:n(alt),acc:n(acc)??99,v:n(v)}};
-// Cálculo del día a partir de posiciones {t (ms), lat, lon, alt, acc, v (m/s)}: desnivel (altitud suavizada, solo bajando), distancia, velocidad y bajadas.
-// El color de cada bajada es una ESTIMACIÓN por su pendiente media (no se compara aún con las pistas del catálogo).
-function Calc(){Object.assign(this,{last:null,o:null,alt:null,desc:0,km:0,max:0,sv:0,nv:0,tSki:0,runs:0,skiing:false,still:0,drop:0,len:0,col:{v:0,a:0,r:0,n:0},tr:[],sp:[],v:0,lastT:0})}
-Calc.prototype.endRun=function(){if(this.len>150&&this.drop>30){this.runs++;const g=this.drop/this.len*100;this.col[g<10?'v':g<18?'a':g<27?'r':'n']++}this.drop=0;this.len=0;this.skiing=false;this.still=0};
-Calc.prototype.add=function(f){if(f.acc>40)return;const o=this.o||(this.o=f),x=(f.lon-o.lon)*111320*Math.cos(o.lat*Math.PI/180),y=-(f.lat-o.lat)*110540,l=this.last;
- const a=f.alt==null?null:this.alt==null?f.alt:this.alt+.15*(f.alt-this.alt);let v=f.v!=null?f.v*3.6:0;
- if(l){const dt=(f.t-l.t)/1000;if(dt<=0)return;
-  if(dt>30)this.endRun();   // se perdió la señal: no se unen las dos posiciones
-  else{const dd=Math.hypot(x-l.x,y-l.y),dh=a!=null&&this.alt!=null?a-this.alt:0;if(!v)v=dd/dt*3.6;
-   if(v>8&&dh<-.05){this.skiing=true;this.still=0;this.desc-=dh;this.km+=dd/1000;this.tSki+=dt;this.drop-=dh;this.len+=dd;this.sv+=v;this.nv++;this.max=Math.max(this.max,v)}
-   else if(this.skiing&&(this.still+=dt)>8)this.endRun()}}   // una bajada solo termina tras 8 s sin bajar: un salto o un parón del GPS no la corta
- if(a!=null)this.alt=a;this.last={x,y,t:f.t};this.lastT=f.t;this.tr.push([x,y]);this.sp.push(Math.round(v));this.v=v};
-Calc.prototype.payload=function(s){this.endRun();if(this.desc<20)return null;let mx=1e9,my=1e9;for(const p of this.tr){if(p[0]<mx)mx=p[0];if(p[1]<my)my=p[1]}
- return{station:s.id,desnivel:this.desc,km:this.km,horas:this.tSki/3600,bajadas:this.runs,vmax:this.max,vmed:this.nv?this.sv/this.nv:0,col:this.col,track:downs(this.tr.map(p=>[p[0]-mx,p[1]-my]),60),speed:downs(this.sp,400),source:'gps'}};
+const parseNat=row=>{const[t,lat,lon,acc,v,,,,alt,,,mk]=row.split(','),n=x=>x===''||x===undefined?null:+x;if(n(lat)==null||n(lon)==null||n(t)==null)return null;return{t:+t,lat:+lat,lon:+lon,alt:n(alt),acc:n(acc)??99,v:n(v),mock:mk==='1'}};
 async function runReal(s,rs){
- const C=new Calc(),t0=rs?rs.t0:Date.now();let id=rs&&rs.id,fx=rs&&!NAT?(rs.fx||[]):[],last=0,lock=null,sub=null,wid=null,next=0,ready=!NAT;const q=[];
+ const C=new Calc(),raw=[],add=f=>{C.add(f);raw.push(f)},t0=rs?rs.t0:Date.now();let id=rs&&rs.id,fx=rs&&!NAT?(rs.fx||[]):[],last=0,lock=null,sub=null,wid=null,next=0,ready=!NAT;const q=[];
  const rec=()=>recSave({station:s.id,t0,native:!!NAT,id,fx:NAT?undefined:fx});
  ov(`<div class="speed"><small>${s.n} · GPS real</small><div class="n" id="sp">0</div><small>km/h</small><div class="kpis" style="margin:36px 0 14px;text-align:left"><div><b id="k1">0</b><small>m desnivel</small></div><div><b id="k2">0</b><small>bajadas</small></div><div><b id="k3">0:00</b><small>tiempo</small></div></div><div class="card" id="sl" style="text-align:left">Esperando señal GPS…</div><button class="btn" id="fin">Terminar el día</button><small style="display:block;margin-top:12px">Si cierras esta pantalla, el día queda guardado en el dispositivo y lo recuperas desde Estaciones.</small></div>`);
  const paint=()=>{const e=$('#sp');if(!e)return;e.textContent=Math.round(C.v);$('#k1').textContent=fmt(C.desc);$('#k2').textContent=C.runs;$('#sl').textContent=C.skiing?'Esquiando':'En remonte o parado'};
@@ -263,30 +249,30 @@ async function runReal(s,rs){
  W=()=>{if(!NAT)rec();if(sub)sub.remove();if(wid!=null)navigator.geolocation.clearWatch(wid);if(lock&&lock.release)lock.release().catch(()=>{})};
  const fail=m=>{flash(m);ov0()};
  if(NAT){
-  try{sub=await NAT.addListener('fix',({n,row})=>{if(!ready){q.push([n,row]);return}if(n<next)return;next=n+1;const f=parseNat(row);if(f){C.add(f);paint()}});
+  try{sub=await NAT.addListener('fix',({n,row})=>{if(!ready){q.push([n,row]);return}if(n<next)return;next=n+1;const f=parseNat(row);if(f){add(f);paint()}});
    const stt=await NAT.status();
    if(!(stt.recording&&rs&&rs.id)){const r=await NAT.start({since:t0});id=r.id}else id=rs.id;
-   rec();const rd=await NAT.read({id,from:0});rd.rows.forEach(r=>{const f=parseNat(r);if(f)C.add(f)});next=rd.next;ready=true;q.forEach(([n,row])=>{if(n>=next){next=n+1;const f=parseNat(row);if(f)C.add(f)}});paint()}
+   rec();const rd=await NAT.read({id,from:0});rd.rows.forEach(r=>{const f=parseNat(r);if(f)add(f)});next=rd.next;ready=true;q.forEach(([n,row])=>{if(n>=next){next=n+1;const f=parseNat(row);if(f)add(f)}});paint()}
   catch(e){return fail(e.code==='denied'?'Sin permiso de ubicación. Actívalo en los ajustes del teléfono.':e.code==='off'?'La ubicación del teléfono está apagada.':e.code==='approximate'?'Activa la ubicación precisa para Pistea.':'No se pudo empezar a grabar: '+(e.message||e))}
  }else{
   if(!navigator.geolocation)return fail('Este dispositivo no tiene GPS.');
-  fx.forEach(a=>C.add({t:a[0],lat:a[1],lon:a[2],alt:a[3],acc:a[4],v:a[5]}));rec();curSave=rec;paint();
-  wid=navigator.geolocation.watchPosition(p=>{const c=p.coords,f={t:p.timestamp,lat:c.latitude,lon:c.longitude,alt:c.altitude,acc:c.accuracy,v:c.speed};C.add(f);fx.push([f.t,f.lat,f.lon,f.alt,f.acc,f.v]);if(Date.now()-last>10000){last=Date.now();rec()}paint()},
+  fx.forEach(a=>add({t:a[0],lat:a[1],lon:a[2],alt:a[3],acc:a[4],v:a[5]}));rec();curSave=rec;paint();
+  wid=navigator.geolocation.watchPosition(p=>{const c=p.coords,f={t:p.timestamp,lat:c.latitude,lon:c.longitude,alt:c.altitude,acc:c.accuracy,v:c.speed};add(f);fx.push([f.t,f.lat,f.lon,f.alt,f.acc,f.v]);if(Date.now()-last>10000){last=Date.now();rec()}paint()},
    e=>fail('No se pudo usar el GPS: '+e.message),{enableHighAccuracy:true,maximumAge:0,timeout:30000});
   try{lock=await navigator.wakeLock.request('screen')}catch(e){}
  }
  const btn=$('#fin');if(!btn)return;
  btn.onclick=async()=>{stopW();clearInterval(T);if(NAT)try{await NAT.stop()}catch(e){}
   const p=C.payload(s);if(!p){flash('No se ha detectado ninguna bajada. No se guarda el día.');recDrop(id);return ov0()}
-  p.total=Math.max(0,((C.lastT||Date.now())-t0)/36e5);saveDay(s,p,btn,()=>recDrop(id))}}
+  p.total=Math.max(0,((C.lastT||Date.now())-t0)/36e5);p.trace=encodeTrace(raw);saveDay(s,p,btn,()=>recDrop(id))}}
 function recDrop(id){recClear();st.rec=null;if(NAT&&id)NAT.clear({id}).catch(()=>{})}
 const recBanner=()=>{const r=st.rec,s=r&&SM[r.station];if(!s)return '';const h=new Date(r.t0).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),can=!r.native||st.recRun;
  return `<div class="card" style="border-color:var(--ac);margin-bottom:18px"><div class="eyebrow">Día sin guardar</div><div style="font-weight:600;margin:6px 0 2px">${esc(s.n)}</div><small>Empezó el ${h}. Está grabado en este dispositivo y aún no se ha subido.</small><div style="display:flex;gap:8px;margin-top:12px">${can?'<button class="btn" style="margin:0;padding:12px" onclick="recResume()">Retomar</button>':''}<button class="btn ${can?'gh':''}" style="margin:0;padding:12px" onclick="recSaveDay()">Guardar día</button><button class="btn gh" style="margin:0;padding:12px" onclick="recDiscard()">Descartar</button></div></div>`};
 const recResume=()=>{const r=st.rec;if(r&&SM[r.station])runReal(SM[r.station],r)};
-async function recSaveDay(){const r=st.rec,s=r&&SM[r.station];if(!s)return recDiscard(true);const C=new Calc();
- try{if(r.native){if(st.recRun)await NAT.stop();const rd=await NAT.read({id:r.id,from:0});rd.rows.forEach(x=>{const f=parseNat(x);if(f)C.add(f)})}else(r.fx||[]).forEach(a=>C.add({t:a[0],lat:a[1],lon:a[2],alt:a[3],acc:a[4],v:a[5]}))}catch(e){return flash('No se pudo leer la grabación: '+(e.message||e))}
+async function recSaveDay(){const r=st.rec,s=r&&SM[r.station];if(!s)return recDiscard(true);const C=new Calc(),raw=[],add=f=>{C.add(f);raw.push(f)};
+ try{if(r.native){if(st.recRun)await NAT.stop();const rd=await NAT.read({id:r.id,from:0});rd.rows.forEach(x=>{const f=parseNat(x);if(f)add(f)})}else(r.fx||[]).forEach(a=>add({t:a[0],lat:a[1],lon:a[2],alt:a[3],acc:a[4],v:a[5]}))}catch(e){return flash('No se pudo leer la grabación: '+(e.message||e))}
  const p=C.payload(s);if(!p){flash('Ese día no tiene bajadas que guardar.');return recDiscard(true)}
- p.total=Math.max(0,((C.lastT||r.t0)-r.t0)/36e5);saveDay(s,p,{},()=>recDrop(r.id))}
+ p.total=Math.max(0,((C.lastT||r.t0)-r.t0)/36e5);p.trace=encodeTrace(raw);saveDay(s,p,{},()=>recDrop(r.id))}
 async function recDiscard(quiet){const r=st.rec;if(!quiet&&!confirm('¿Descartar el día sin guardar? No se podrá recuperar.'))return;if(NAT&&r&&r.id){try{if(st.recRun)await NAT.stop()}catch(e){}}recDrop(r&&r.id);render()}
 function resumen(s,r){st.last={s,d:r.day};const d=r.day,tot=d.col.v+d.col.a+d.col.r+d.col.n,C=[['Verdes','--g',d.col.v],['Azules','--b',d.col.a],['Rojas','--r',d.col.r],['Negras','--k',d.col.n]];
  st.toast=r.before&&r.after<r.before?`Subes del puesto ${r.before} al ${r.after} de España`:0;

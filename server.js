@@ -3,6 +3,7 @@
 'use strict';
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
 const { promisify } = require('util'), { createClient } = require('@libsql/client'), { legal, LEGAL_HEADERS } = require('./legal');
+const { Calc, decodeTrace } = require('./public/calc.js'), GEO = require('./estaciones_geo.json');   // el mismo cálculo que la app; centro y radio de cada estación
 const env = process.env, PORT = +env.PORT || 3000, PROD = env.NODE_ENV === 'production', VERCEL = !!env.VERCEL, TRUST = env.TRUST_PROXY === '1';
 const APP_URL = (env.APP_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + env.VERCEL_PROJECT_PRODUCTION_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 const DATA = env.DATA_DIR || __dirname, AVATARS_DIR = path.join(DATA, 'avatars');
@@ -31,7 +32,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, alias TEXT NOT NULL, salt TEXT NOT NULL, hash TEXT NOT NULL, demo INTEGER DEFAULT 0, created INTEGER, avatar TEXT, age INTEGER, bio TEXT, station_home TEXT, modality TEXT DEFAULT 'ski', level TEXT DEFAULT 'intermedio', terms_accepted_at INTEGER, updated_at INTEGER)`,
   `CREATE TABLE IF NOT EXISTS tokens(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER, created INTEGER, ua TEXT)`,
   `CREATE TABLE IF NOT EXISTS resets(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER)`,
-  `CREATE TABLE IF NOT EXISTS days(id TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, station TEXT NOT NULL, ts INTEGER NOT NULL, desnivel REAL, km REAL, horas REAL, bajadas INTEGER, vmax REAL, vmed REAL, col TEXT, track TEXT, speed TEXT, src TEXT DEFAULT 'gps', total REAL)`,
+  `CREATE TABLE IF NOT EXISTS days(id TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, station TEXT NOT NULL, ts INTEGER NOT NULL, desnivel REAL, km REAL, horas REAL, bajadas INTEGER, vmax REAL, vmed REAL, col TEXT, track TEXT, speed TEXT, src TEXT DEFAULT 'gps', total REAL, t0 INTEGER, t1 INTEGER)`,
   `CREATE TABLE IF NOT EXISTS kudos(day TEXT REFERENCES days(id) ON DELETE CASCADE, uid TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(day, uid))`,
   `CREATE TABLE IF NOT EXISTS follows(a TEXT REFERENCES users(id) ON DELETE CASCADE, b TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(a, b))`,
   `CREATE TABLE IF NOT EXISTS audit_logs(id TEXT PRIMARY KEY, uid TEXT, action TEXT NOT NULL, ip TEXT NOT NULL, ua TEXT, details TEXT, ts INTEGER NOT NULL)`,
@@ -41,7 +42,7 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY, reporter TEXT NOT NULL, target TEXT NOT NULL, day TEXT, reason TEXT NOT NULL, note TEXT, ts INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', resolved_by TEXT, resolved_at INTEGER, action TEXT)`,
   `CREATE TABLE IF NOT EXISTS verifs(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER)`];
 const ALTERS = [['users', 'avatar TEXT'], ['users', 'age INTEGER'], ['users', 'bio TEXT'], ['users', 'station_home TEXT'], ['users', "modality TEXT DEFAULT 'ski'"], ['users', "level TEXT DEFAULT 'intermedio'"],
-  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER'], ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
+  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER'], ['days', 't0 INTEGER'], ['days', 't1 INTEGER'], ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
 const INDEXES = ['CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts)', 'CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts)',
   'CREATE INDEX IF NOT EXISTS i_tokens_uid ON tokens(uid)', 'CREATE INDEX IF NOT EXISTS i_audit_uid ON audit_logs(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_audit_ts ON audit_logs(ts)',
   'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)', 'CREATE INDEX IF NOT EXISTS i_blocks_b ON blocks(b)', 'CREATE INDEX IF NOT EXISTS i_reports ON reports(status, target)'];
@@ -63,6 +64,23 @@ async function housekeeping(force) {   // caducidades y retención de datos (RGP
 // ---------- estadísticas ----------
 const WIN = { hoy: DAY, semana: 7 * DAY, temporada: 365 * DAY };
 const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)', vmax: 'MAX(vmax)' };   // lista cerrada: nunca entra texto del usuario en el SQL
+// ---------- antitrampas: el día se recalcula en el servidor desde la traza GPS (que no se guarda) ----------
+const distKm = (a, b) => { const r = Math.PI / 180, x = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) / 2 * r), y = (b.lat - a.lat) * r; return Math.hypot(x, y) * 6371; };
+function checkTrace(trace, station) {
+  if (trace && trace.mk > 0) return { error: 'La grabación tiene ubicaciones simuladas. Desactiva las apps que falsean el GPS.' };
+  let fx; try { fx = decodeTrace(trace); } catch { return { error: 'La grabación GPS no es válida.' }; }
+  const t0 = fx[0].t, t1 = fx[fx.length - 1].t, g = GEO[station], good = fx.filter(f => f.acc <= 40);
+  if (fx.length < 60 || t1 - t0 < 5 * MIN) return { error: 'La grabación es demasiado corta para guardarla.' };
+  if (t1 - t0 > 16 * HOUR) return { error: 'Una grabación no puede durar más de 16 horas.' };
+  if (t1 > Date.now() + 5 * MIN || t0 < Date.now() - 7 * DAY) return { error: 'La fecha de la grabación no es válida (como mucho, días de la última semana).' };
+  if (!g || good.length < 30) return { error: 'La grabación no tiene suficiente señal GPS.' };
+  if (good.filter(f => distKm(f, g) <= g.km).length / good.length < .8) return { error: 'La grabación no es de esta estación. Elige la estación en la que has esquiado.' };
+  let jumps = 0; for (let i = 1; i < good.length; i++) { const dt = (good[i].t - good[i - 1].t) / 1000; if (dt > 0 && distKm(good[i], good[i - 1]) * 1000 / dt > 42) jumps++; }
+  if (jumps / good.length > .02) return { error: 'La grabación tiene saltos imposibles (más de 150 km/h).' };
+  const C = new Calc(); for (const f of fx) C.add(f);
+  const p = C.payload({ id: station }); if (!p) return { error: 'No se ha detectado ninguna bajada en la grabación.' };
+  return { p, t0, t1 };
+}
 const SRC = ALLOW_SIM ? '1=1' : "src!='sim'", SRC_D = ALLOW_SIM ? '1=1' : "d.src!='sim'";
 const pubCond = p => `${VERIFY ? `COALESCE(${p}verified,1)=1 AND ` : ''}COALESCE(${p}hidden,0)=0 AND COALESCE(${p}banned,0)=0`;   // ver VERIFY
 const pubU = () => pubCond('u.'), pubUid = c => `${c} IN (SELECT id FROM users WHERE ${pubCond('')})`;
@@ -362,14 +380,20 @@ const routes = {
     const c = b.col && typeof b.col === 'object' ? b.col : {}, src = b.source === 'sim' ? 'sim' : 'gps';
     if (src === 'sim' && !ALLOW_SIM) return send(res, 403, { error: 'La simulación está desactivada en producción.' });
     if (!SID.has(b.station)) return send(res, 400, { error: 'Estación no válida.' });
-    const d = { id: rid(), uid: u.id, station: b.station, ts: Date.now(), desnivel: num(b.desnivel, 40000), km: num(b.km, 300), horas: num(b.horas, 14), bajadas: Math.round(num(b.bajadas, 200)), vmax: num(b.vmax, 140), vmed: num(b.vmed, 100), total: num(b.total, 24), src,
+    let t0 = null, t1 = null;
+    if (src === 'gps') {
+      const v = checkTrace(b.trace, b.station); if (v.error) return send(res, 400, { error: v.error });
+      Object.assign(b, v.p, { total: (v.t1 - v.t0) / HOUR }); t0 = v.t0; t1 = v.t1;   // lo que mande el móvil se sustituye por lo calculado aquí
+      if (await one('SELECT 1 x FROM days WHERE uid=? AND t1>? AND t0<?', [u.id, t0, t1])) return send(res, 409, { error: 'Ese día ya está guardado.' });
+    }
+    const d = { id: rid(), uid: u.id, station: b.station, ts: t1 || Date.now(), t0, t1, desnivel: num(b.desnivel, 40000), km: num(b.km, 300), horas: num(b.horas, 14), bajadas: Math.round(num(b.bajadas, 200)), vmax: num(b.vmax, 140), vmed: num(b.vmed, 100), total: num(b.total, 24), src,
       col: { v: num(c.v, 200) | 0, a: num(c.a, 200) | 0, r: num(c.r, 200) | 0, n: num(c.n, 200) | 0 },
       track: (Array.isArray(b.track) ? b.track : []).slice(0, 60).map(p => Array.isArray(p) ? [num(p[0], 1e5), num(p[1], 1e5)] : [0, 0]), speed: (Array.isArray(b.speed) ? b.speed : []).slice(0, 400).map(v => num(v, 140)) };
     if (d.bajadas > 0 && d.desnivel / d.bajadas > 1500) return send(res, 400, { error: 'Datos incoherentes: demasiado desnivel por bajada.' });
     if (d.horas > 0 && d.km / d.horas > 90) return send(res, 400, { error: 'Datos incoherentes: velocidad media imposible.' });
     if ((await count('SELECT COUNT(*) n FROM days WHERE uid=? AND ts>?', [u.id, Date.now() - DAY])) >= 5) return send(res, 429, { error: 'Máximo 5 días guardados cada 24 horas.' });
     const before = ((await posOf(u.id, 'desnivel', null, 'temporada')) || {}).pos || 0;
-    await run('INSERT INTO days(id,uid,station,ts,desnivel,km,horas,bajadas,vmax,vmed,col,track,speed,src,total) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [d.id, d.uid, d.station, d.ts, d.desnivel, d.km, d.horas, d.bajadas, d.vmax, d.vmed, JSON.stringify(d.col), JSON.stringify(d.track), JSON.stringify(d.speed), d.src, d.total || null]);
+    await run('INSERT INTO days(id,uid,station,ts,desnivel,km,horas,bajadas,vmax,vmed,col,track,speed,src,total,t0,t1) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [d.id, d.uid, d.station, d.ts, d.desnivel, d.km, d.horas, d.bajadas, d.vmax, d.vmed, JSON.stringify(d.col), JSON.stringify(d.track), JSON.stringify(d.speed), d.src, d.total || null, t0, t1]);
     stationsCache.t = 0;
     const [after, ps] = await Promise.all([posOf(u.id, 'desnivel', null, 'temporada'), posOf(u.id, 'desnivel', d.station, 'temporada')]);
     send(res, 200, { day: d, before, after: (after || {}).pos || 0, posStation: (ps || {}).pos || 0 });
@@ -490,11 +514,12 @@ async function handler(req, res) {
       await dbReady(); housekeeping().catch(() => {});
       const u = PUB.has(key) ? null : await authUser(req, res);
       if (!PUB.has(key) && !u) return send(res, 401, { error: 'Tu sesión ha caducado. Entra de nuevo.' });
-      const b = req.method === 'GET' ? {} : await readBody(req, key === 'POST /api/avatar' ? 6e5 : 2e5);
+      const b = req.method === 'GET' ? {} : await readBody(req, key === 'POST /api/avatar' ? 6e5 : key === 'POST /api/days' ? 25e5 : 2e5);   // un día de 8 h de traza ≈ 0,6 MB
       if (!b || typeof b !== 'object' || Array.isArray(b)) return send(res, 400, { error: 'Petición no válida.' });
       return await r({ req, res, u, q: url.searchParams, b });
     }
     if (url.pathname.startsWith('/avatars/')) return await serveAvatar(req, res, url.pathname.slice(9));
+    if (url.pathname === '/calc.js') return serveFile(req, res, path.join(__dirname, 'public'), 'calc.js');
     if (url.pathname.startsWith('/img/')) return serveFile(req, res, path.join(__dirname, 'public', 'img'), url.pathname.slice(4));
     if (url.pathname === '/3d') { res.writeHead(301, { Location: '/3d/' + url.search }); return res.end(); }
     if (url.pathname.startsWith('/3d/')) return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });

@@ -150,6 +150,10 @@ public class GrabadorService extends Service {
 
     // Una línea del fichero: hora (ms), latitud, longitud, precisión (m), velocidad (m/s) y su precisión, rumbo (º) y su
     // precisión, altitud (m) y su precisión, satélites. Lo que el GPS no da, vacío. Double.toString usa siempre el punto
+    private static boolean mock(Location l) {
+        return Build.VERSION.SDK_INT >= 31 ? l.isMock() : l.isFromMockProvider();
+    }
+
     private static String row(Location l) {
         boolean o = Build.VERSION.SDK_INT >= 26;
         return l.getTime() + "," + round(l.getLatitude(), 1e7) + "," + round(l.getLongitude(), 1e7) + ","
@@ -160,7 +164,8 @@ public class GrabadorService extends Service {
                 + (o && l.hasBearingAccuracy() ? round(l.getBearingAccuracyDegrees(), 10) : "") + ","
                 + (l.hasAltitude() ? round(l.getAltitude(), 10) : "") + ","
                 + (o && l.hasVerticalAccuracy() ? round(l.getVerticalAccuracyMeters(), 10) : "") + ","
-                + (sats >= 0 ? sats : "");
+                + (sats >= 0 ? sats : "") + ","
+                + (mock(l) ? "1" : "");   // ubicación simulada (apps que falsean el GPS): el servidor rechaza el día
     }
 
     private static String round(double v, double k) {

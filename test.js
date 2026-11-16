@@ -22,6 +22,18 @@ const browser = () => {
 const day = (o = {}) => ({ station: 'valdesqui', desnivel: 9000, km: 45, horas: 4, bajadas: 20, vmax: 80, vmed: 30, col: { v: 5, a: 6, r: 8, n: 1 }, track: [[0, 0], [5, 5]], speed: [10, 20], source: 'sim', ...o });
 // Último enlace (verify o reset) que el servidor «mandó» por correo a esa dirección (en local se escribe en la consola)
 const linkFor = (email, kind) => { const i = out.lastIndexOf('[correo simulado] para ' + email); if (i < 0) return null; const m = out.slice(i).match(new RegExp('\\?' + kind + '=([a-f0-9]{64})')); return m && m[1]; };
+// Un día sintético con verdad conocida: n bajadas de 200 s (10 m/s, -1,1 m/s) con remonte de 120 s, desde (lat, lon)
+const { encodeTrace } = require('./public/calc.js');
+function synthDay({ lat = 40.80, lon = -3.965, runs = 3, start = Date.now() - 3 * 36e5, jump = false, mock = false } = {}) {
+  const fx = []; let t = start, la = lat, alt = 2250;
+  for (let r = 0; r < runs; r++) {
+    for (let k = 0; k < 200; k++) { t += 1000; la -= 0.00009; alt -= 1.1; fx.push({ t, lat: la, lon: lon + k * 1e-5, alt, acc: 5, v: 10, mock }); }
+    for (let k = 0; k < 120; k++) { t += 1000; la += 0.00015; alt += 1.83; fx.push({ t, lat: la, lon, alt, acc: 5, v: 3 }); }
+  }
+  if (jump) for (let k = 0; k < 60; k++) { t += 1000; fx.push({ t, lat: lat + (k % 2 ? 0.05 : 0), lon, alt, acc: 5, v: null }); }
+  return fx;
+}
+const gpsDay = (o, extra = {}) => ({ station: 'valdesqui', source: 'gps', desnivel: 39999, bajadas: 99, km: 299, vmax: 139, trace: encodeTrace(synthDay(o)), ...extra });
 const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana Test', terms: true };
 (async () => {
   await start();
@@ -157,6 +169,20 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   [s, j, r] = await A('GET', '/api/me/export'); t('exportar mis datos', s === 200 && j.usuario?.email === 'ana@pistea.es' && /attachment/.test(r.headers.get('content-disposition')));
   for (let i = 0; i < 3; i++) await A('POST', '/api/days', day());
   t('límite de 5 días/24 h', (await A('POST', '/api/days', day()))[0] === 429);
+  // --- antitrampas: el servidor recalcula el día desde la traza
+  const G = browser(); await G('POST', '/api/register', { ...REG, email: 'gps@pistea.es', alias: 'Gps Real' });
+  t('día GPS sin traza', (await G('POST', '/api/days', { station: 'valdesqui', source: 'gps', desnivel: 5000, bajadas: 10 }))[0] === 400);
+  t('traza con basura', (await G('POST', '/api/days', { station: 'valdesqui', source: 'gps', trace: { v: 1, t: ['x'], la: [1], lo: [1], al: [1], ac: [1], sp: [1] } }))[0] === 400);
+  t('traza de otra estación (Sierra Nevada como Valdesquí)', /no es de esta estación/.test((await G('POST', '/api/days', gpsDay({ lat: 37.08, lon: -3.39 })))[1].error || ''));
+  t('ubicación simulada', /simuladas/.test((await G('POST', '/api/days', gpsDay({ mock: true })))[1].error || ''));
+  t('saltos imposibles', /saltos/.test((await G('POST', '/api/days', gpsDay({ jump: true })))[1].error || ''));
+  t('traza de hace un mes', (await G('POST', '/api/days', gpsDay({ start: Date.now() - 30 * 864e5 })))[0] === 400);
+  [s, j] = await G('POST', '/api/days', gpsDay());
+  t('día GPS real: se guarda', s === 200, JSON.stringify(j).slice(0, 200));
+  t('…con las cifras del servidor, no las del móvil', j.day && j.day.bajadas === 3 && j.day.desnivel > 550 && j.day.desnivel < 700 && j.day.km < 10 && j.day.vmax < 50, JSON.stringify(j.day || {}).slice(0, 160));
+  t('…con el tiempo total de la traza', j.day && Math.abs(j.day.total - 960 / 3600) < 0.01);
+  t('el mismo día dos veces', (await G('POST', '/api/days', gpsDay()))[0] === 409);
+  t('la traza no se guarda (solo el recorrido simplificado)', !(await db.execute('PRAGMA table_info(days)')).rows.some(r => /trace|lat|lon/.test(r.name)) && JSON.parse((await db.execute("SELECT track FROM days WHERE src='gps' LIMIT 1")).rows[0].track).length <= 60);
   // --- recuperar contraseña
   t('forgot correo inexistente (misma respuesta)', (await browser()('POST', '/api/forgot', { email: 'no@existe.es' }))[0] === 200);
   t('forgot', (await browser()('POST', '/api/forgot', { email: 'ana@pistea.es' }))[0] === 200);
