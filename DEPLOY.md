@@ -6,10 +6,17 @@
 - En local, sin esas variables, se usa un fichero `pistea.sqlite` (o el de `DATA_DIR`). Las pruebas usan siempre una BD temporal, nunca la de producción.
 - Las fotos de perfil van dentro de la BD (≤ 400 KB, reducidas a 300×300 en el móvil).
 
-## 2. Vercel (lo que hay ahora)
-- `vercel.json` manda todo a `server.js` e incluye `public/`. Variables en el panel de Vercel: `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `RESEND_API_KEY`, `MAIL_FROM` (y `APP_URL` si el dominio no es el de producción de Vercel).
-- **Mapas 3D**: la carpeta `mapas/` (≈ 780 MB) no cabe en una función de Vercel (límite 250 MB): hay que servirla aparte (almacenamiento estático o CDN) y apuntar el iframe a esa dirección. Sin eso, la ficha no enseña el 3D en Vercel.
-- El plan gratuito de Vercel no permite uso comercial: para lanzar, plan Pro o servidor propio.
+## 2. Vercel (lo que hay ahora): https://pistea.vercel.app
+- **Se publica solo**: Vercel está conectado al repositorio de GitHub. Cada subida a `main` publica una versión nueva en un par de minutos.
+- **Variables** (Vercel → Settings → Environment Variables, entorno Production):
+  - Base de datos: `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`. Ya están.
+  - Correo: `BREVO_API_KEY` y `MAIL_FROM`.
+  - Páginas legales: `LEGAL_NAME` y `LEGAL_EMAIL`.
+  - Moderadores: `ADMIN_EMAILS`.
+  - Opcional: `APP_URL`, si usas un dominio propio.
+  - Tras cambiar una variable hay que publicar de nuevo (Deployments → ⋯ → Redeploy).
+- **Mapas 3D**: `mapas/` se sirve también desde Vercel, comprobado en producción. Cada vista del 3D descarga entre 40 y 75 MB: vigila el tráfico del plan.
+- **Plan**: el plan gratuito de Vercel no permite uso comercial. Para lanzar, plan Pro o servidor propio.
 
 ## 3. Servidor propio con Docker (alternativa)
 ```
