@@ -377,7 +377,7 @@ async function sendVerify(u) {
 // ---------- API ----------
 // Versión mínima de la APK de Android (versionCode de app/android/app/build.gradle). Si la APK instalada es más vieja, la app avisa y enseña dónde bajar la nueva.
 // Al sacar una APK nueva: sube APK_MIN (aquí o en la variable de entorno), sustituye el archivo en Drive (mismo enlace) y haz push.
-const APK = { min: +process.env.APK_MIN || 2, url: process.env.APK_URL || 'https://drive.google.com/uc?export=download&id=1PWAxRG00lTLqZ_hR-9Wd5bha2y8oxtp-' };
+const APK = { min: +process.env.APK_MIN || 2, url: process.env.APK_URL || 'https://drive.google.com/uc?export=download&id=1ree93ZAkNR2FwgKDFHDs3QFztkvNcf5f' };
 const PUB = new Set(['POST /api/register', 'POST /api/login', 'POST /api/forgot', 'POST /api/reset', 'GET /api/config', 'POST /api/logout', 'POST /api/verify']);
 const routes = {
   'POST /api/register': async ({ req, res, b }) => {
