@@ -375,6 +375,9 @@ async function sendVerify(u) {
 }
 
 // ---------- API ----------
+// Versión mínima de la APK de Android (versionCode de app/android/app/build.gradle). Si la APK instalada es más vieja, la app avisa y enseña dónde bajar la nueva.
+// Al sacar una APK nueva: sube APK_MIN (aquí o en la variable de entorno), sustituye el archivo en Drive (mismo enlace) y haz push.
+const APK = { min: +process.env.APK_MIN || 2, url: process.env.APK_URL || 'https://drive.google.com/uc?export=download&id=1PWAxRG00lTLqZ_hR-9Wd5bha2y8oxtp-' };
 const PUB = new Set(['POST /api/register', 'POST /api/login', 'POST /api/forgot', 'POST /api/reset', 'GET /api/config', 'POST /api/logout', 'POST /api/verify']);
 const routes = {
   'POST /api/register': async ({ req, res, b }) => {
@@ -859,7 +862,7 @@ const routes = {
     await audit(u.id, 'ADMIN_PANEL', req, { users: out.length });
     send(res, 200, { now: Date.now(), users: out, days: days.map(d => [d.uid, d.station, d.ts, d.desnivel, d.km, d.bajadas, d.vmax, d.freeride, d.src]), reports: open, stations: Object.fromEntries(STATIONS.map(s => [s[0], s[1]])) });
   },
-  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/' })
+  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK })
 };
 
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------
