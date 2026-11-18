@@ -1,0 +1,8 @@
+# Lo que no se sube a Vercel. Los mapas 3D se publican en Cloudflare Pages (ver DEPLOY.md): de ellos solo sube el relieve
+# (dem.u16d), que usa el motor del día. Vercel guarda la función de cada despliegue: con los mapas dentro, el 16-nov-2026
+# el «Functions Storage» llegó a unos 18 GB, y el plan gratuito da 10 GB.
+/app
+/scripts
+/mapas/**
+!/mapas/**/
+!/mapas/estaciones/*/data/dem.u16d

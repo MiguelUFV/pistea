@@ -3,11 +3,14 @@
 'use strict';
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
 const { promisify } = require('util'), { createClient } = require('@libsql/client'), { legal, LEGAL_HEADERS } = require('./legal');
-const { Calc, decodeTrace } = require('./public/calc.js'), GEO = require('./estaciones_geo.json');   // el mismo cálculo que la app; centro y radio de cada estación
+const { Calc, decodeTrace, fromPack, heights } = require('./public/calc.js'), GEO = require('./estaciones_geo.json');   // el mismo cálculo que la app; centro y radio de cada estación
 const env = process.env, PORT = +env.PORT || 3000, PROD = env.NODE_ENV === 'production', VERCEL = !!env.VERCEL, TRUST = env.TRUST_PROXY === '1';
 const APP_URL = (env.APP_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + env.VERCEL_PROJECT_PRODUCTION_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 const DATA = env.DATA_DIR || __dirname, AVATARS_DIR = path.join(DATA, 'avatars');
 const MAPS = env.MAPS_DIR || (fs.existsSync(path.join(__dirname, 'mapas')) ? path.join(__dirname, 'mapas') : path.resolve(__dirname, '../../Estaciones3D/web/dist/app'));
+// En producción el 3D se sirve desde Cloudflare Pages (MAPS_URL): sin límite de tráfico y fuera de la función de Vercel, que
+// solo lleva el relieve (dem.u16d) para el motor del día. Sin MAPS_URL (en local o con Docker), lo sirve este servidor.
+const MAPS_URL = (env.MAPS_URL || (VERCEL ? 'https://pistea-mapas.pages.dev' : '')).replace(/\/$/, ''), MAPS_ORIGIN = MAPS_URL && new URL(MAPS_URL).origin;
 const ALLOW_SIM = !PROD || env.ALLOW_SIM === '1', MIN = 6e4, HOUR = 36e5, DAY = 864e5, SESSION = 90 * DAY;
 
 // Estaciones con mapa 3D disponible (mismo id que el motor Estaciones3D)
@@ -40,17 +43,31 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS hits(k TEXT NOT NULL, ts INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS blocks(a TEXT NOT NULL, b TEXT NOT NULL, ts INTEGER, PRIMARY KEY(a, b))`,
   `CREATE TABLE IF NOT EXISTS reports(id TEXT PRIMARY KEY, reporter TEXT NOT NULL, target TEXT NOT NULL, day TEXT, reason TEXT NOT NULL, note TEXT, ts INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'open', resolved_by TEXT, resolved_at INTEGER, action TEXT)`,
-  `CREATE TABLE IF NOT EXISTS verifs(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER)`];
+  `CREATE TABLE IF NOT EXISTS verifs(th TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, exp INTEGER)`,
+  // Pasaporte y récords por pista: una fila por pista bajada en cada día GPS (de su desglose, calculado en el servidor):
+  // cuántas bajadas la tocaron, metros por ella y la máxima en ella (km/h; null en días antiguos sin máxima por tramo)
+  `CREATE TABLE IF NOT EXISTS passes(day TEXT NOT NULL REFERENCES days(id) ON DELETE CASCADE, uid TEXT NOT NULL, station TEXT NOT NULL, piste TEXT NOT NULL, c TEXT, n INTEGER NOT NULL, m REAL, vmax REAL, ts INTEGER NOT NULL, PRIMARY KEY(day, piste))`];
 const ALTERS = [['users', 'avatar TEXT'], ['users', 'age INTEGER'], ['users', 'bio TEXT'], ['users', 'station_home TEXT'], ['users', "modality TEXT DEFAULT 'ski'"], ['users', "level TEXT DEFAULT 'intermedio'"],
-  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER'], ['days', 't0 INTEGER'], ['days', 't1 INTEGER'], ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
+  ['users', 'terms_accepted_at INTEGER'], ['users', 'updated_at INTEGER'], ['days', 'total REAL'], ['tokens', 'created INTEGER'], ['tokens', 'ua TEXT'], ['users', 'verified INTEGER'], ['days', 't0 INTEGER'], ['days', 't1 INTEGER'], // Ficha de esquiador: @usuario, desde qué año esquía, terreno (JSON), estaciones que quiere esquiar (JSON), reto de días,
+  // equipo, club o escuela y si ya pasó el alta guiada
+  ['users', 'handle TEXT'], ['users', 'since INTEGER'], ['users', 'terrain TEXT'], ['users', 'wish TEXT'], ['users', 'goal_days INTEGER'], ['users', 'gear TEXT'], ['users', 'club TEXT'], ['users', 'onboarded INTEGER'],
+  ['days', 'freeride REAL'], ['days', 'detail TEXT'],   // km fuera de pista y el desglose del día (bajadas con sus pistas, remontes, metros por color)
+  ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
 const INDEXES = ['CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts)', 'CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts)',
   'CREATE INDEX IF NOT EXISTS i_tokens_uid ON tokens(uid)', 'CREATE INDEX IF NOT EXISTS i_audit_uid ON audit_logs(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_audit_ts ON audit_logs(ts)',
-  'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)', 'CREATE INDEX IF NOT EXISTS i_blocks_b ON blocks(b)', 'CREATE INDEX IF NOT EXISTS i_reports ON reports(status, target)'];
+  'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)', 'CREATE INDEX IF NOT EXISTS i_blocks_b ON blocks(b)', 'CREATE INDEX IF NOT EXISTS i_reports ON reports(status, target)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS u_users_handle ON users(handle)',
+  'CREATE INDEX IF NOT EXISTS i_passes_st ON passes(station, piste, ts)', 'CREATE INDEX IF NOT EXISTS i_passes_uid ON passes(uid, station)'];   // el @usuario es único (NULL, sin elegir, se puede repetir)
 async function init() {
   if (DB_URL.startsWith('file:')) await run('PRAGMA journal_mode=WAL').catch(() => {});
   await atomic(SCHEMA.map(s => [s]));
   for (const [t, c] of ALTERS) await run(`ALTER TABLE ${t} ADD COLUMN ${c}`).catch(() => {});   // BD creadas con versiones anteriores
   await atomic(INDEXES.map(s => [s]));
+  // Una sola vez: el pasaporte de los días guardados antes de que existiera (los que tienen desglose de pistas)
+  if (!(await one('SELECT 1 x FROM passes LIMIT 1'))) {
+    const rows = (await all("SELECT id, uid, station, ts, detail FROM days WHERE detail IS NOT NULL AND src='gps'")).flatMap(d => passRows(d, J(d.detail, null)));
+    for (let i = 0; i < rows.length; i += 200) await atomic(rows.slice(i, i + 200));
+  }
   await housekeeping(true);
 }
 let ready = null;
@@ -63,7 +80,7 @@ async function housekeeping(force) {   // caducidades y retención de datos (RGP
 
 // ---------- estadísticas ----------
 const WIN = { hoy: DAY, semana: 7 * DAY, temporada: 365 * DAY };
-const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)', vmax: 'MAX(vmax)' };   // lista cerrada: nunca entra texto del usuario en el SQL
+const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', freeride: 'SUM(COALESCE(freeride,0))', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)', vmax: 'MAX(vmax)' };   // lista cerrada: nunca entra texto del usuario en el SQL
 // ---------- antitrampas: el día se recalcula en el servidor desde la traza GPS (que no se guarda) ----------
 const distKm = (a, b) => { const r = Math.PI / 180, x = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) / 2 * r), y = (b.lat - a.lat) * r; return Math.hypot(x, y) * 6371; };
 function checkTrace(trace, station) {
@@ -77,9 +94,22 @@ function checkTrace(trace, station) {
   if (good.filter(f => distKm(f, g) <= g.km).length / good.length < .8) return { error: 'La grabación no es de esta estación. Elige la estación en la que has esquiado.' };
   let jumps = 0; for (let i = 1; i < good.length; i++) { const dt = (good[i].t - good[i - 1].t) / 1000; if (dt > 0 && distKm(good[i], good[i - 1]) * 1000 / dt > 42) jumps++; }
   if (jumps / good.length > .02) return { error: 'La grabación tiene saltos imposibles (más de 150 km/h).' };
-  const C = new Calc(); for (const f of fx) C.add(f);
+  const C = new Calc(stationOf(station)); for (const f of fx) C.add(f);
   const p = C.payload({ id: station }); if (!p) return { error: 'No se ha detectado ninguna bajada en la grabación.' };
   return { p, t0, t1 };
+}
+// Lo que el motor del día sabe de cada estación: pistas, remontes y proyección (public/seg, de scripts/gen_seguimiento.js)
+// y el relieve del mapa 3D. Se guardan las 6 últimas pedidas (unos 4 MB cada una)
+const PACKS = new Map();
+function stationOf(id) {
+  if (PACKS.has(id)) { const s = PACKS.get(id); PACKS.delete(id); PACKS.set(id, s); return s; }
+  let s = null;
+  try {
+    const pack = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'seg', id + '.json'), 'utf8')), dem = path.join(MAPS, 'estaciones', id, 'data', 'dem.u16d');
+    s = fromPack(pack, fs.existsSync(dem) ? heights(zlib.gunzipSync(fs.readFileSync(dem))) : null);
+  } catch (e) { console.error('[estación]', id, e.message); }
+  PACKS.set(id, s); if (PACKS.size > 6) PACKS.delete(PACKS.keys().next().value);
+  return s;
 }
 const SRC = ALLOW_SIM ? '1=1' : "src!='sim'", SRC_D = ALLOW_SIM ? '1=1' : "d.src!='sim'";
 const pubCond = p => `${VERIFY ? `COALESCE(${p}verified,1)=1 AND ` : ''}COALESCE(${p}hidden,0)=0 AND COALESCE(${p}banned,0)=0`;   // ver VERIFY
@@ -91,12 +121,101 @@ async function posOf(uid, metric, st, period) {
     SELECT (SELECT v FROM t WHERE uid=?) mine, (SELECT COUNT(*) FROM t WHERE v>(SELECT v FROM t WHERE uid=?))+1 pos, (SELECT COUNT(*) FROM t) total, (SELECT MIN(v) FROM t WHERE v>(SELECT v FROM t WHERE uid=?)) nxt`, [Date.now() - WIN[period], st, st, uid, uid, uid, uid]);
   return !r || r.mine == null ? null : { pos: r.pos, v: r.mine, total: r.total, gap: r.nxt == null ? 0 : r.nxt - r.mine };
 }
-const agg = uid => one(`SELECT COALESCE(SUM(desnivel),0) desnivel, COALESCE(SUM(km),0) km, COALESCE(SUM(horas),0) horas, COALESCE(SUM(bajadas),0) bajadas, COUNT(*) dias, COALESCE(MAX(vmax),0) vmax FROM days WHERE uid=? AND ${SRC}`, [uid]);
+const agg = uid => one(`SELECT COALESCE(SUM(desnivel),0) desnivel, COALESCE(SUM(km),0) km, COALESCE(SUM(horas),0) horas, COALESCE(SUM(bajadas),0) bajadas, COUNT(*) dias, COALESCE(MAX(vmax),0) vmax, COALESCE(SUM(freeride),0) freeride FROM days WHERE uid=? AND ${SRC}`, [uid]);
 async function streak(uid) { const wk = t => Math.floor(t / (7 * DAY)), set = new Set((await all('SELECT ts FROM days WHERE uid=?', [uid])).map(r => wk(r.ts))); let w = wk(Date.now()), n = 0; if (!set.has(w)) w--; while (set.has(w)) { n++; w--; } return n; }
 async function league(uid) { const p = await posOf(uid, 'desnivel', null, 'semana'); if (!p) return { tier: null }; const f = (p.pos - 1) / p.total; return { tier: f < .1 ? 'Diamante' : f < .3 ? 'Oro' : f < .6 ? 'Plata' : 'Bronce', pos: p.pos, total: p.total, v: p.v }; }
 const stationsDistinct = async uid => (await all(`SELECT DISTINCT station s FROM days WHERE uid=? AND ${SRC}`, [uid])).map(r => r.s);
 const count = async (sql, args) => (await one(sql, args)).n;
 let stationsCache = { t: 0, v: null };   // la portada la pide mucho y cuesta 27 clasificaciones: se guarda un minuto
+
+// ---------- pasaporte de pistas y récords por pista ----------
+const PASS_MIN = 100;   // metros por una pista para contarla bajada: cruzarla o rozarla no cuenta
+// Las pistas de un desglose (detail.runs: [t0, t1, desnivel, metros, máx., [[color, pista, metros, máx.]]]): nombre ->
+// { color, bajadas que la tocaron, metros, máxima }. Los días anteriores al desglose v3 no tienen máxima por tramo: vale
+// la de la bajada si fue casi entera por esa pista
+function passesOf(detail) {
+  const out = new Map(); if (!detail || !Array.isArray(detail.runs)) return out;
+  for (const r of detail.runs) {
+    const segs = (Array.isArray(r[5]) ? r[5] : []).filter(g => Array.isArray(g) && typeof g[1] === 'string' && g[1] && /^[varnf]$/.test(g[0]) && +g[2] >= PASS_MIN);
+    const solo = segs.length === 1 && +segs[0][2] >= 0.7 * (+r[3] || 0), seen = new Set();
+    for (const g of segs) {
+      const name = g[1].slice(0, 80), o = out.get(name) || { c: g[0], n: 0, m: 0, v: 0 };
+      if (!seen.has(name)) { o.n++; seen.add(name); }
+      const v = g.length > 3 ? +g[3] : solo ? +r[4] : 0;
+      o.m += +g[2]; if (Number.isFinite(v) && v > o.v && v < 145) o.v = v;   // el motor no da más de 144 km/h (MAX_SPEED)
+      out.set(name, o);
+    }
+  }
+  return out;
+}
+const passRows = (d, detail) => [...passesOf(detail)].map(([name, o]) => ['INSERT OR REPLACE INTO passes(day,uid,station,piste,c,n,m,vmax,ts) VALUES(?,?,?,?,?,?,?,?,?)',
+  [d.id, d.uid, d.station, name, o.c, o.n, Math.round(o.m), o.v ? Math.round(o.v * 10) / 10 : null, d.ts]]);
+// Dominios compartidos: el mapa de La Molina lleva las pistas de Masella (y Astún las de Candanchú). Un día grabado en una
+// puede pasar por pistas de la otra; las que se llaman como una propia llevan detrás el nombre de su estación
+// («Panoràmica (Masella)»). La lista de cada estación es la de su ficha (public/img/pistas.json, de gen_pistas.js)
+const DOMAIN = { 'la-molina': 'masella', masella: 'la-molina', astun: 'candanchu', candanchu: 'astun', 'fuentes-de-invierno': 'san-isidro', 'san-isidro': 'fuentes-de-invierno' }, SNAME = Object.fromEntries(STATIONS.map(s => [s[0], s[1]]));
+let PIST = null;
+const pisteList = id => { if (!PIST) { try { PIST = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'img', 'pistas.json'), 'utf8')); } catch { PIST = {}; } }
+  if (!PIST[id]) return null; if (!PIST[id].set) PIST[id].set = new Map(PIST[id].map(p => [p[0], p[1]])); return PIST[id].set; };
+// La pista de la estación «id» que es una fila de passes (estación s, nombre p), o null si es de otra
+function pisteOf(id, s, p) {
+  const L = pisteList(id);
+  if (s === id) return !L || L.has(p) ? p : null;
+  if (s !== DOMAIN[id] || !L) return null;
+  const sfx = ` (${SNAME[id]})`;
+  if (p.endsWith(sfx)) { const k = p.slice(0, -sfx.length); return L.has(k) ? k : null; }
+  const N = pisteList(s); return L.has(p) && !(N && N.has(p)) ? p : null;
+}
+// La estación y el nombre de ficha de una fila de passes (las de la vecina pasan a su estación); si no casa, tal cual
+const canon = (s, p) => { if (pisteOf(s, s, p)) return [s, p]; const o = DOMAIN[s], k = o && pisteOf(o, s, p); return k ? [o, k] : [s, p]; };
+const stationsFor = id => DOMAIN[id] ? [id, DOMAIN[id]] : [id];
+// Las filas de passes de unas estaciones en la temporada móvil (y de esos nombres, si se dan), visibles para quien mira,
+// por pista de ficha y por esquiador: Map(«estación\u0001pista» -> Map(uid -> { uid, alias, avatar, c, v, n, t })).
+// Lo de todos (cuentas públicas) se guarda un minuto por consulta; lo de quien mira se lee siempre al momento (así se ve
+// en las clasificaciones nada más guardar un día) y los bloqueos se quitan en cada petición
+const GP = new Map(), GP_TTL = MIN, COLL = { t: 0, v: null };
+// Tras guardar, quitar o moderar días y cuentas, lo guardado en memoria se rehace en la siguiente petición (en esta instancia;
+// en las demás de Vercel, como mucho un minuto después)
+const fresh = () => { stationsCache.t = 0; GP.clear(); COLL.t = 0; };
+const gpAdd = (out, r) => {
+  const [s, k] = canon(r.s, r.p), key = s + '\u0001' + k, us = out.get(key) || out.set(key, new Map()).get(key), o = us.get(r.uid);
+  if (o) { o.v = Math.max(o.v, r.v || 0); o.n += r.n; o.t = Math.min(o.t, r.t); } else us.set(r.uid, { uid: r.uid, alias: r.alias, avatar: r.avatar, c: r.c, v: r.v || 0, n: r.n, t: r.t });
+};
+async function groupedPasses(sts, viewer, names) {
+  const where = `p.station IN (${sts.map(() => '?').join(',')}) AND p.ts>=?${names ? ` AND p.piste IN (${names.map(() => '?').join(',')})` : ''}`, args = [...sts, Date.now() - WIN.temporada, ...(names || [])];
+  const ck = sts.join(',') + '|' + (names || []).join('\u0002');
+  let base = GP.get(ck);
+  if (!base || Date.now() - base.t > GP_TTL) {
+    const rows = await all(`SELECT p.station s, p.piste p, p.c c, p.uid uid, u.alias alias, u.avatar avatar, MAX(p.vmax) v, SUM(p.n) n, MIN(p.ts) t FROM passes p JOIN users u ON u.id=p.uid
+      WHERE ${where} AND ${pubU()} GROUP BY p.station, p.piste, p.uid`, args);
+    base = { t: Date.now(), rows }; GP.set(ck, base); if (GP.size > 200) GP.delete(GP.keys().next().value);
+  }
+  const [mine, blk] = await Promise.all([
+    all(`SELECT p.station s, p.piste p, p.c c, p.uid uid, u.alias alias, u.avatar avatar, MAX(p.vmax) v, SUM(p.n) n, MIN(p.ts) t FROM passes p JOIN users u ON u.id=p.uid WHERE ${where} AND p.uid=? GROUP BY p.station, p.piste`, [...args, viewer]),
+    all('SELECT b x FROM blocks WHERE a=? UNION SELECT a x FROM blocks WHERE b=?', [viewer, viewer])]);
+  const skip = new Set(blk.map(r => r.x)); skip.add(viewer);
+  const out = new Map();
+  for (const r of base.rows) if (!skip.has(r.uid)) gpAdd(out, r);
+  for (const r of mine) gpAdd(out, r);
+  return out;
+}
+const seasonStart = () => { const n = new Date(); return Date.UTC(n.getUTCFullYear() - (n.getUTCMonth() < 6 ? 1 : 0), 6, 1); };   // 1 de julio, como la app
+const isPub = u => (!VERIFY || u.verified !== 0) && !u.hidden && !u.banned;
+// Lo que un día nuevo trae al pasaporte y a los récords: pistas nuevas, mejores marcas propias y pistas en las que pasa a
+// ser el más rápido de la temporada (contra lo guardado antes de este día)
+async function novelties(u, station, detail) {
+  const P = passesOf(detail); if (!P.size) return { nuevas: [], pr: [], top: [] };
+  const names = [...P.keys()], qs = names.map(() => '?').join(','), since = Date.now() - WIN.temporada;
+  const [mine, others] = await Promise.all([
+    all(`SELECT piste, MAX(COALESCE(vmax,0)) v FROM passes WHERE uid=? AND station=? AND piste IN (${qs}) GROUP BY piste`, [u.id, station, ...names]),
+    all(`SELECT p.piste piste, MAX(p.vmax) v FROM passes p JOIN users u ON u.id=p.uid WHERE p.station=? AND p.ts>=? AND p.uid!=? AND p.piste IN (${qs}) AND ${pubU()} GROUP BY p.piste`, [station, since, u.id, ...names])]);
+  const M = new Map(mine.map(r => [r.piste, r.v])), O = new Map(others.map(r => [r.piste, r.v || 0])), r1 = v => Math.round(v);
+  const nuevas = names.filter(n => !M.has(n)).map(n => [n, P.get(n).c]);
+  const pr = names.filter(n => M.has(n) && M.get(n) > 0 && P.get(n).v > M.get(n) + 0.5).map(n => [n, r1(P.get(n).v), r1(M.get(n))]);
+  const top = isPub(u) ? names.filter(n => P.get(n).v > 0 && P.get(n).v > (O.get(n) || 0) && !(M.get(n) >= P.get(n).v)).map(n => [n, r1(P.get(n).v)]) : [];
+  const crowned = new Set(top.map(x => x[0]));   // la corona ya dice que es su mejor marca
+  return { nuevas, pr: pr.filter(x => !crowned.has(x[0])), top };
+}
 
 // ---------- utilidades HTTP, sesiones y límites ----------
 // IP del cliente: en Vercel la cabecera la pone la plataforma (no se puede falsificar); detrás de Caddy/nginx, el ÚLTIMO
@@ -111,6 +230,14 @@ const hk = key => sha('pistea-rl:' + key).slice(0, 40);
 const over = async (key, max, win) => (await count('SELECT COUNT(*) n FROM hits WHERE k=? AND ts>?', [hk(key), Date.now() - win])) >= max;
 const hit = key => run('INSERT INTO hits(k,ts) VALUES(?,?)', [hk(key), Date.now()]);
 const limited = async (key, max, win) => { if (await over(key, max, win)) return true; await hit(key); return false; };
+// Freno de ráfagas de la API por conexión, en memoria (sin escribir en la BD en cada petición): para un bucle o un robot,
+// no para el uso normal. Vale por instancia; los límites de verdad (alta, entrada, días…) son los de arriba, en la BD
+const BURST = new Map(), BURST_MAX = 1200;
+function burst(ip) {
+  const now = Date.now(), w = BURST.get(ip);
+  if (!w || now - w.t > MIN) { BURST.set(ip, { t: now, n: 1 }); if (BURST.size > 20000) BURST.clear(); return false; }
+  return ++w.n > BURST_MAX;
+}
 
 const COOKIE = PROD ? '__Host-pistea' : 'pistea_s';
 const cookies = req => { const o = {}; for (const p of String(req.headers.cookie || '').split(';')) { const i = p.indexOf('='); if (i > 0) o[p.slice(0, i).trim()] = p.slice(i + 1).trim(); } return o; };
@@ -152,7 +279,22 @@ function offensive(v) {
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const normEmail = v => str(v, 254).trim().toLowerCase();
 const safeAvatar = a => typeof a === 'string' && /^\/avatars\/[a-z0-9_.]+(\?v=\d+)?$/.test(a) ? a : null;
-const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified, admin: isAdmin(u) || undefined });
+const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified, admin: isAdmin(u) || undefined,
+  ...card(u), goal_days: u.goal_days || null, onboarded: !!u.onboarded });
+// Lo público de la ficha de esquiador (el reto de días es solo para uno mismo)
+const card = u => ({ handle: u.handle || null, since: u.since || null, terrain: J(u.terrain), wish: J(u.wish), gear: u.gear || '', club: u.club || '' });
+// @usuario: 3 a 20 letras minúsculas, cifras, punto o guion bajo, empezando y acabando en letra o cifra. Los nombres de la
+// app y de las estaciones quedan reservados para que nadie se haga pasar por ellas
+const TERRAIN = ['pista', 'carving', 'baches', 'park', 'freeride', 'travesia'];
+const RESERVED = new Set(['admin', 'administrador', 'pistea', 'soporte', 'ayuda', 'moderacion', 'moderador', 'oficial', 'staff', 'root', 'api', 'null', 'undefined', 'estacion', 'estaciones']);
+const reservedHandle = h => RESERVED.has(h) || [...SID].some(id => id.replace(/-/g, '') === h.replace(/[._]/g, '') || id.replace(/-/g, '.') === h || id.replace(/-/g, '_') === h);
+function badHandle(h) {
+  if (!/^[a-z0-9][a-z0-9._]{1,18}[a-z0-9]$/.test(h) || /[._]{2}/.test(h)) return 'El @usuario lleva de 3 a 20 letras sin acentos, cifras, punto o guion bajo, y empieza y acaba en letra o cifra.';
+  if (reservedHandle(h)) return 'Ese @usuario está reservado. Elige otro.';
+  if (offensive(h.replace(/[._]/g, ' '))) return 'Ese @usuario no está permitido. Elige otro.';
+  return null;
+}
+const handleOf = v => str(v, 40).trim().toLowerCase().replace(/^@/, '');
 const audit = (uid, action, req, details = {}) => run('INSERT INTO audit_logs(id,uid,action,ip,ua,details,ts) VALUES(?,?,?,?,?,?,?)', [rid(), uid || null, action, ipOf(req), str(req.headers['user-agent'], 200), JSON.stringify(details), Date.now()]).catch(e => console.error('[auditoría]', e.message));
 
 // ---------- contraseñas: scrypt (N=32768) con sal propia; los hashes antiguos (N=16384) se renuevan al entrar ----------
@@ -283,7 +425,7 @@ const routes = {
     const v = await one('SELECT uid FROM verifs WHERE th=? AND exp>?', [sha(str(b.token, 100)), Date.now()]);
     if (!v) return send(res, 400, { error: 'El enlace no es válido o ha caducado. Pide otro desde tu perfil.' });
     await atomic([['UPDATE users SET verified=1, updated_at=? WHERE id=?', [Date.now(), v.uid]], ['DELETE FROM verifs WHERE uid=?', [v.uid]]]);
-    stationsCache.t = 0; await audit(v.uid, 'EMAIL_VERIFIED', req); send(res, 200, { ok: true });
+    fresh(); await audit(v.uid, 'EMAIL_VERIFIED', req); send(res, 200, { ok: true });
   },
   'POST /api/verify/resend': async ({ req, res, u }) => {
     if (u.verified === null || u.verified) return send(res, 200, { ok: true, verified: true });
@@ -294,9 +436,11 @@ const routes = {
   'POST /api/logout': async ({ req, res }) => { const t = tokenOf(req); if (t) await run('DELETE FROM tokens WHERE th=?', [sha(t)]); clearSession(req, res); send(res, 200, { ok: true }); },
   'POST /api/logout-all': async ({ req, res, u }) => { await run('DELETE FROM tokens WHERE uid=?', [u.id]); clearSession(req, res); await audit(u.id, 'LOGOUT_ALL', req); send(res, 200, { ok: true }); },
   'GET /api/me': async ({ res, u }) => {
-    const [totals, stations, days, pos, stk, lg, following, followers, sessions] = await Promise.all([agg(u.id), stationsDistinct(u.id), all('SELECT id,station,ts,desnivel,km,horas,bajadas,vmax FROM days WHERE uid=? ORDER BY ts DESC LIMIT 30', [u.id]),
-      posOf(u.id, 'desnivel', null, 'temporada'), streak(u.id), league(u.id), count('SELECT COUNT(*) n FROM follows WHERE a=?', [u.id]), count('SELECT COUNT(*) n FROM follows WHERE b=?', [u.id]), count('SELECT COUNT(*) n FROM tokens WHERE uid=? AND exp>?', [u.id, Date.now()])]);
-    send(res, 200, { user: clean(u), totals, stations, days, pos: (pos || {}).pos || 0, streak: stk, league: lg, following, followers, sessions });
+    const n = new Date(), season = Date.UTC(n.getUTCFullYear() - (n.getUTCMonth() < 6 ? 1 : 0), 6, 1);   // la temporada empieza el 1 de julio, como en la app
+    const [totals, stations, days, pos, stk, lg, following, followers, sessions, seasonDays] = await Promise.all([agg(u.id), stationsDistinct(u.id), all('SELECT id,station,ts,desnivel,km,horas,bajadas,vmax,freeride FROM days WHERE uid=? ORDER BY ts DESC LIMIT 30', [u.id]),
+      posOf(u.id, 'desnivel', null, 'temporada'), streak(u.id), league(u.id), count('SELECT COUNT(*) n FROM follows WHERE a=?', [u.id]), count('SELECT COUNT(*) n FROM follows WHERE b=?', [u.id]), count('SELECT COUNT(*) n FROM tokens WHERE uid=? AND exp>?', [u.id, Date.now()]),
+      count(`SELECT COUNT(*) n FROM days WHERE uid=? AND ts>=? AND ${SRC}`, [u.id, season])]);
+    send(res, 200, { user: clean(u), totals, stations, days, pos: (pos || {}).pos || 0, streak: stk, league: lg, following, followers, sessions, seasonDays });
   },
   'POST /api/me': async ({ req, res, u, b }) => {
     const updates = [], params = [], audited = [];
@@ -310,9 +454,30 @@ const routes = {
     if (b.station_home !== undefined) { const sh = b.station_home ? str(b.station_home, 40) : null; if (sh && !SID.has(sh)) return send(res, 400, { error: 'Estación habitual no válida.' }); updates.push('station_home=?'); params.push(sh); audited.push('station_home'); }
     if (b.modality !== undefined) { const m = str(b.modality, 20); if (!['ski', 'snowboard', 'ambos'].includes(m)) return send(res, 400, { error: 'Modalidad no válida.' }); updates.push('modality=?'); params.push(m); audited.push('modality'); }
     if (b.level !== undefined) { const l = str(b.level, 20); if (!['debutante', 'intermedio', 'avanzado', 'experto'].includes(l)) return send(res, 400, { error: 'Nivel no válido.' }); updates.push('level=?'); params.push(l); audited.push('level'); }
+    if (b.handle !== undefined) {
+      const h = handleOf(b.handle);
+      if (!h) updates.push('handle=NULL');
+      else { const bad = badHandle(h); if (bad) return send(res, 400, { error: bad }); updates.push('handle=?'); params.push(h); }
+      audited.push('handle');
+    }
+    if (b.since !== undefined) {
+      if (b.since === null || b.since === '') updates.push('since=NULL');
+      else { const y = parseInt(b.since, 10); if (!Number.isFinite(y) || y < 1940 || y > new Date().getFullYear()) return send(res, 400, { error: 'Año en el que empezaste a esquiar no válido.' }); updates.push('since=?'); params.push(y); }
+      audited.push('since');
+    }
+    if (b.terrain !== undefined) { if (!Array.isArray(b.terrain) || b.terrain.some(x => !TERRAIN.includes(x))) return send(res, 400, { error: 'Terreno no válido.' }); updates.push('terrain=?'); params.push(JSON.stringify([...new Set(b.terrain)])); audited.push('terrain'); }
+    if (b.wish !== undefined) { if (!Array.isArray(b.wish) || b.wish.length > 12 || b.wish.some(x => !SID.has(x))) return send(res, 400, { error: 'Elige hasta 12 estaciones de la lista.' }); updates.push('wish=?'); params.push(JSON.stringify([...new Set(b.wish)])); audited.push('wish'); }
+    if (b.goal_days !== undefined) {
+      if (b.goal_days === null || b.goal_days === '') updates.push('goal_days=NULL');
+      else { const g = parseInt(b.goal_days, 10); if (!Number.isFinite(g) || g < 1 || g > 150) return send(res, 400, { error: 'El reto de temporada va de 1 a 150 días.' }); updates.push('goal_days=?'); params.push(g); }
+      audited.push('goal_days');
+    }
+    for (const k of ['gear', 'club']) if (b[k] !== undefined) { const v = text(b[k], 60); if (offensive(v)) return send(res, 400, { error: k === 'gear' ? 'El equipo tiene palabras que no están permitidas.' : 'El club tiene palabras que no están permitidas.' }); updates.push(k + '=?'); params.push(v); audited.push(k); }
+    if (b.onboarded === true) updates.push('onboarded=1');
     if (!updates.length) return send(res, 400, { error: 'No hay campos que actualizar.' });
     updates.push('updated_at=?'); params.push(Date.now(), u.id);
-    await run(`UPDATE users SET ${updates.join(', ')} WHERE id=?`, params);   // los nombres de columna son fijos; los valores van como parámetros
+    try { await run(`UPDATE users SET ${updates.join(', ')} WHERE id=?`, params); }   // los nombres de columna son fijos; los valores van como parámetros
+    catch (err) { if (/UNIQUE/i.test(err.message)) return send(res, 409, { error: 'Ese @usuario ya lo tiene otra persona. Prueba con otro.' }); throw err; }
     await audit(u.id, 'PROFILE_UPDATE', req, { campos: audited });
     send(res, 200, { ok: true, user: clean(await one('SELECT * FROM users WHERE id=?', [u.id])) });
   },
@@ -339,6 +504,7 @@ const routes = {
   'GET /api/me/export': async ({ req, res, u }) => {   // derecho de acceso y portabilidad (art. 15 y 20 RGPD)
     const days = (await all('SELECT * FROM days WHERE uid=? ORDER BY ts ASC', [u.id])).map(d => ({ ...d, col: J(d.col, {}), track: J(d.track), speed: J(d.speed) }));
     const data = { aviso: 'Exportación de tus datos en Pistea (art. 15 y 20 RGPD).', fecha: new Date().toISOString(), usuario: clean(u), dias: days,
+      pasaporte_de_pistas: await all('SELECT day dia, station estacion, piste pista, c color, n bajadas, m metros, vmax velocidad_max_kmh, ts FROM passes WHERE uid=? ORDER BY ts ASC', [u.id]),
       siguiendo: (await all('SELECT u.alias alias FROM follows f JOIN users u ON u.id=f.b WHERE f.a=?', [u.id])).map(r => r.alias),
       sesiones_abiertas: await all('SELECT created, exp, ua FROM tokens WHERE uid=? AND exp>?', [u.id, Date.now()]),
       registro_de_seguridad: await all('SELECT action, ip, ua, ts FROM audit_logs WHERE uid=? ORDER BY ts ASC', [u.id]) };
@@ -350,15 +516,98 @@ const routes = {
     if (await limited('del:' + u.id, 10, HOUR)) return send(res, 429, { error: 'Demasiados intentos. Inténtalo más tarde.' });
     if (!(await checkPw(str(b.password, 200), u))) return send(res, 403, { error: 'Contraseña incorrecta.' });
     await atomic([['DELETE FROM kudos WHERE uid=? OR day IN (SELECT id FROM days WHERE uid=?)', [u.id, u.id]], ['DELETE FROM follows WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM blocks WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM reports WHERE reporter=? OR target=?', [u.id, u.id]],
-      ['DELETE FROM days WHERE uid=?', [u.id]], ['DELETE FROM tokens WHERE uid=?', [u.id]], ['DELETE FROM resets WHERE uid=?', [u.id]], ['DELETE FROM verifs WHERE uid=?', [u.id]], ['DELETE FROM avatars WHERE uid=?', [u.id]],
+      ['DELETE FROM passes WHERE uid=?', [u.id]], ['DELETE FROM days WHERE uid=?', [u.id]], ['DELETE FROM tokens WHERE uid=?', [u.id]], ['DELETE FROM resets WHERE uid=?', [u.id]], ['DELETE FROM verifs WHERE uid=?', [u.id]], ['DELETE FROM avatars WHERE uid=?', [u.id]],
       ['DELETE FROM audit_logs WHERE uid=?', [u.id]], ['DELETE FROM users WHERE id=?', [u.id]]]);
-    await audit(u.id, 'ACCOUNT_DELETION', req);   // solo queda constancia del borrado, sin datos personales
+    fresh(); await audit(u.id, 'ACCOUNT_DELETION', req);   // solo queda constancia del borrado, sin datos personales
     clearSession(req, res); send(res, 200, { ok: true });
   },
   'GET /api/rank': async ({ res, u, q }) => {
     const metric = MX[q.get('metric')] ? q.get('metric') : 'desnivel', period = WIN[q.get('period')] ? q.get('period') : 'temporada', st = SID.has(q.get('station')) ? q.get('station') : null;
     const [rows, me] = await Promise.all([rankRows(metric, st, period, 10, u.id), posOf(u.id, metric, st, period)]);
     send(res, 200, { rows: rows.map((x, k) => ({ pos: k + 1, alias: x.alias, avatar: safeAvatar(x.avatar), v: x.v, me: x.uid === u.id })), me: me && { pos: me.pos, v: me.v }, gap: me ? me.gap : 0, total: me ? me.total : rows.length });
+  },
+  // Pasaporte: por estación, las pistas de su ficha que ha bajado [pista, color, bajadas, primera vez, máx. km/h]; sus coronas
+  // de la temporada (pistas en las que es el más rápido, o el que más veces la ha bajado, con al menos 2) y su puesto entre
+  // coleccionistas (pistas distintas)
+  'GET /api/passport': async ({ res, u }) => {
+    const rows = await all('SELECT station s, piste p, c, SUM(n) n, MIN(ts) t, MAX(vmax) v FROM passes WHERE uid=? GROUP BY station, piste', [u.id]);
+    const out = {};
+    for (const r of rows) {
+      const [id, k] = canon(r.s, r.p), L = out[id] || (out[id] = {}), o = L[k];
+      L[k] = o ? [k, o[1], o[2] + r.n, Math.min(o[3], r.t), Math.max(o[4], r.v || 0)] : [k, r.c, r.n, r.t, r.v || 0];
+    }
+    const stations = Object.fromEntries(Object.entries(out).map(([id, L]) => [id, Object.values(L).map(x => [x[0], x[1], x[2], x[3], Math.round(x[4])])]));
+    const crowns = { v: [], n: [] }, sts = [...new Set(rows.map(r => r.s).flatMap(stationsFor))];
+    if (sts.length && isPub(u)) {
+      const per = await groupedPasses(sts, u.id);
+      for (const [key, us] of per) {
+        const [id, k] = key.split('\u0001'), L = [...us.values()], bv = L.filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.t - b.t)[0], bn = L.sort((a, b) => b.n - a.n || a.t - b.t)[0];
+        if (bv && bv.uid === u.id) crowns.v.push([id, k, Math.round(bv.v)]);
+        if (bn && bn.uid === u.id && bn.n >= 2) crowns.n.push([id, k, bn.n]);
+      }
+    }
+    // Puesto entre coleccionistas: lo de los demás (cuentas públicas) se guarda un minuto; lo propio, al momento
+    if (!COLL.v || Date.now() - COLL.t > MIN) COLL.v = (await all(`SELECT uid, COUNT(DISTINCT station||'|'||piste) v FROM passes WHERE ${pubUid('uid')} GROUP BY uid`)), COLL.t = Date.now();
+    const mineN = rows.length, others = COLL.v.filter(r => r.uid !== u.id);
+    send(res, 200, { stations, crowns, rank: mineN ? { pos: others.filter(r => r.v > mineN).length + 1, total: others.length + 1 } : null });
+  },
+  // Una pista: sus clasificaciones de la temporada (velocidad máxima y bajadas) y lo mío en ella
+  'GET /api/piste': async ({ res, u, q }) => {
+    const id = q.get('station'), name = text(q.get('name'), 80);
+    if (!SID.has(id) || !name) return send(res, 400, { error: 'Pista no válida.' });
+    const per = (await groupedPasses(stationsFor(id), u.id, [name, `${name} (${SNAME[id]})`])).get(id + '\u0001' + name) || new Map();
+    const L = [...per.values()], by = k => L.filter(x => x[k] > 0).sort((a, b) => b[k] - a[k] || a.t - b.t);
+    const sp = by('v'), rn = by('n'), me = per.get(u.id), row = k => (x, i) => ({ pos: i + 1, alias: x.alias, avatar: safeAvatar(x.avatar), v: k === 'v' ? Math.round(x.v) : x.n, me: x.uid === u.id });
+    const mine = (await all(`SELECT station s, piste p, SUM(n) n, MIN(ts) t, MAX(vmax) v FROM passes WHERE uid=? AND station IN (${stationsFor(id).map(() => '?').join(',')}) AND piste IN (?,?) GROUP BY station, piste`,
+      [u.id, ...stationsFor(id), name, `${name} (${SNAME[id]})`])).filter(r => canon(r.s, r.p).join('\u0001') === id + '\u0001' + name);
+    const L2 = pisteList(id);
+    send(res, 200, { station: id, name, c: (L2 && L2.get(name)) || null, skiers: L.length, speed: sp.slice(0, 10).map(row('v')), runs: rn.slice(0, 10).map(row('n')),
+      me: { posV: me && me.v > 0 ? sp.indexOf(me) + 1 : 0, posN: me ? rn.indexOf(me) + 1 : 0, v: me ? Math.round(me.v) : 0, n: me ? me.n : 0 },
+      mine: mine.length ? { n: mine.reduce((a, r) => a + r.n, 0), t: Math.min(...mine.map(r => r.t)), v: Math.round(Math.max(...mine.map(r => r.v || 0))) } : null });
+  },
+  // Los récords de una estación: por pista, el más rápido y el que más la ha bajado esta temporada, y lo mío
+  'GET /api/records': async ({ res, u, q }) => {
+    const id = q.get('station'); if (!SID.has(id)) return send(res, 400, { error: 'Estación no válida.' });
+    const per = await groupedPasses(stationsFor(id), u.id), L = pisteList(id), out = [];
+    for (const [key, us] of per) {
+      const [s, k] = key.split('\u0001'); if (s !== id) continue;
+      const A = [...us.values()], bv = A.filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.t - b.t)[0], bn = A.slice().sort((a, b) => b.n - a.n || a.t - b.t)[0], me = us.get(u.id);
+      out.push({ name: k, c: (L && L.get(k)) || A[0].c, skiers: A.length, v: bv ? { alias: bv.alias, v: Math.round(bv.v), me: bv.uid === u.id } : null,
+        n: { alias: bn.alias, n: bn.n, me: bn.uid === u.id }, mine: me ? { v: Math.round(me.v), n: me.n } : null });
+    }
+    send(res, 200, out.sort((a, b) => (b.v ? b.v.v : 0) - (a.v ? a.v.v : 0) || a.name.localeCompare(b.name, 'es')));
+  },
+  // Pistea Wrapped: la temporada (desde el 1 de julio) contada en cifras, con su pista favorita, la más rápida y el puesto
+  'GET /api/wrapped': async ({ res, u }) => {
+    const since = seasonStart();
+    const days = await all(`SELECT id, station, ts, desnivel, km, horas, bajadas, vmax, freeride, detail FROM days WHERE uid=? AND ts>=? AND ${SRC} ORDER BY ts`, [u.id, since]);
+    if (!days.length) return send(res, 200, { empty: true, since });
+    const sum = k => days.reduce((a, d) => a + (+d[k] || 0), 0), m = { v: 0, a: 0, r: 0, n: 0, f: 0 }, byStation = {}, months = {};
+    let best = days[0], fast = days[0];
+    for (const d of days) {
+      const D = J(d.detail, null); if (D && D.m) for (const k in m) m[k] += +D.m[k] || 0;
+      byStation[d.station] = (byStation[d.station] || 0) + 1; const mo = new Date(d.ts).getUTCMonth(); months[mo] = (months[mo] || 0) + 1;
+      if (d.desnivel > best.desnivel) best = d; if (d.vmax > fast.vmax) fast = d;
+    }
+    const top = Object.entries(byStation).sort((a, b) => b[1] - a[1])[0];
+    const P = new Map();
+    for (const r of await all('SELECT station s, piste p, c, SUM(n) n, MAX(vmax) v FROM passes WHERE uid=? AND ts>=? GROUP BY station, piste', [u.id, since])) {
+      const [s, k] = canon(r.s, r.p), key = s + '\u0001' + k, o = P.get(key);
+      if (o) { o.n += r.n; o.v = Math.max(o.v, r.v || 0); } else P.set(key, { s, p: k, c: r.c, n: r.n, v: r.v || 0 });
+    }
+    const PL = [...P.values()], fav = PL.slice().sort((a, b) => b.n - a.n)[0] || null, fastP = PL.filter(x => x.v > 0).sort((a, b) => b.v - a.v)[0] || null;
+    let fastRank = null;
+    if (fastP) {
+      const per = (await groupedPasses(stationsFor(fastP.s), u.id, [fastP.p, `${fastP.p} (${SNAME[fastP.s]})`])).get(fastP.s + '\u0001' + fastP.p);
+      const vs = per ? [...per.values()].map(x => x.v) : [], mine = per && per.get(u.id) ? per.get(u.id).v : 0;
+      fastRank = { pos: vs.filter(v => v > mine).length + 1, total: vs.filter(v => v > 0).length };
+    }
+    const pos = await posOf(u.id, 'desnivel', null, 'temporada');
+    send(res, 200, { since, alias: u.alias, dias: days.length, desnivel: sum('desnivel'), km: sum('km'), horas: sum('horas'), bajadas: sum('bajadas'), freeride: sum('freeride'),
+      vmax: fast.vmax, vmaxAt: { station: fast.station, ts: fast.ts }, m, stations: Object.keys(byStation).length, top: { station: top[0], dias: top[1] },
+      best: { station: best.station, ts: best.ts, desnivel: best.desnivel, km: best.km, bajadas: best.bajadas }, months, pistes: PL.length,
+      fav: fav && { station: fav.s, name: fav.p, c: fav.c, n: fav.n }, fast: fastP && { station: fastP.s, name: fastP.p, c: fastP.c, v: Math.round(fastP.v), ...fastRank },
+      pos: pos ? { pos: pos.pos, total: pos.total } : null, first: days[0].ts, last: days[days.length - 1].ts });
   },
   'GET /api/stations': async ({ res }) => {
     if (Date.now() - stationsCache.t > MIN || !stationsCache.v) {
@@ -371,7 +620,7 @@ const routes = {
   },
   'GET /api/feed': async ({ res, u, q }) => {
     const onlyF = q.get('scope') === 'amigos' ? 1 : 0;
-    const rows = await all(`SELECT d.id id, d.uid uid, d.station station, d.ts ts, d.desnivel desnivel, d.km km, d.bajadas bajadas, d.vmax vmax, d.track track, u.alias alias, u.avatar avatar,
+    const rows = await all(`SELECT d.id id, d.uid uid, d.station station, d.ts ts, d.desnivel desnivel, d.km km, d.bajadas bajadas, d.vmax vmax, d.freeride freeride, d.track track, u.alias alias, u.avatar avatar,
       (SELECT COUNT(*) FROM kudos k WHERE k.day=d.id) kudos, EXISTS(SELECT 1 FROM kudos k WHERE k.day=d.id AND k.uid=?) liked
       FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${pubU()} OR d.uid=?) AND ${notBlocked('d.uid')} AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, u.id, u.id, onlyF, u.id, u.id]);
     send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: J(d.track), liked: !!d.liked })));
@@ -380,47 +629,75 @@ const routes = {
     const c = b.col && typeof b.col === 'object' ? b.col : {}, src = b.source === 'sim' ? 'sim' : 'gps';
     if (src === 'sim' && !ALLOW_SIM) return send(res, 403, { error: 'La simulación está desactivada en producción.' });
     if (!SID.has(b.station)) return send(res, 400, { error: 'Estación no válida.' });
+    // Los límites, antes de recalcular la traza (es lo caro): 5 días guardados cada 24 h y 30 intentos por hora
+    if ((await count('SELECT COUNT(*) n FROM days WHERE uid=? AND ts>?', [u.id, Date.now() - DAY])) >= 5) return send(res, 429, { error: 'Máximo 5 días guardados cada 24 horas.' });
+    if (await limited('dy:' + u.id, 30, HOUR)) return send(res, 429, { error: 'Demasiados intentos de guardar. Inténtalo dentro de un rato.' });
     let t0 = null, t1 = null;
     if (src === 'gps') {
       const v = checkTrace(b.trace, b.station); if (v.error) return send(res, 400, { error: v.error });
       Object.assign(b, v.p, { total: (v.t1 - v.t0) / HOUR }); t0 = v.t0; t1 = v.t1;   // lo que mande el móvil se sustituye por lo calculado aquí
       if (await one('SELECT 1 x FROM days WHERE uid=? AND t1>? AND t0<?', [u.id, t0, t1])) return send(res, 409, { error: 'Ese día ya está guardado.' });
     }
+    // Con GPS, el recorrido y el desglose son los del motor aquí (de fiar); en la simulación (solo en desarrollo), lo que mande
+    const gps = src === 'gps';
     const d = { id: rid(), uid: u.id, station: b.station, ts: t1 || Date.now(), t0, t1, desnivel: num(b.desnivel, 40000), km: num(b.km, 300), horas: num(b.horas, 14), bajadas: Math.round(num(b.bajadas, 200)), vmax: num(b.vmax, 140), vmed: num(b.vmed, 100), total: num(b.total, 24), src,
-      col: { v: num(c.v, 200) | 0, a: num(c.a, 200) | 0, r: num(c.r, 200) | 0, n: num(c.n, 200) | 0 },
-      track: (Array.isArray(b.track) ? b.track : []).slice(0, 60).map(p => Array.isArray(p) ? [num(p[0], 1e5), num(p[1], 1e5)] : [0, 0]), speed: (Array.isArray(b.speed) ? b.speed : []).slice(0, 400).map(v => num(v, 140)) };
+      col: { v: num(c.v, 200) | 0, a: num(c.a, 200) | 0, r: num(c.r, 200) | 0, n: num(c.n, 200) | 0, f: num(c.f, 200) | 0 }, freeride: num(b.freeride, 300),
+      track: gps ? b.track : (Array.isArray(b.track) ? b.track : []).slice(0, 60).map(p => Array.isArray(p) ? [num(p[0], 1e5), num(p[1], 1e5)] : [0, 0]), speed: (Array.isArray(b.speed) ? b.speed : []).slice(0, 400).map(v => num(v, 140)),
+      detail: gps ? b.detail : null };
     if (d.bajadas > 0 && d.desnivel / d.bajadas > 1500) return send(res, 400, { error: 'Datos incoherentes: demasiado desnivel por bajada.' });
     if (d.horas > 0 && d.km / d.horas > 90) return send(res, 400, { error: 'Datos incoherentes: velocidad media imposible.' });
-    if ((await count('SELECT COUNT(*) n FROM days WHERE uid=? AND ts>?', [u.id, Date.now() - DAY])) >= 5) return send(res, 429, { error: 'Máximo 5 días guardados cada 24 horas.' });
-    const before = ((await posOf(u.id, 'desnivel', null, 'temporada')) || {}).pos || 0;
-    await run('INSERT INTO days(id,uid,station,ts,desnivel,km,horas,bajadas,vmax,vmed,col,track,speed,src,total,t0,t1) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [d.id, d.uid, d.station, d.ts, d.desnivel, d.km, d.horas, d.bajadas, d.vmax, d.vmed, JSON.stringify(d.col), JSON.stringify(d.track), JSON.stringify(d.speed), d.src, d.total || null, t0, t1]);
-    stationsCache.t = 0;
+    const [before, nov] = await Promise.all([posOf(u.id, 'desnivel', null, 'temporada'), gps ? novelties(u, d.station, d.detail) : null]);
+    // El día y sus pistas (pasaporte y récords), juntos o nada
+    await atomic([['INSERT INTO days(id,uid,station,ts,desnivel,km,horas,bajadas,vmax,vmed,col,track,speed,src,total,t0,t1,freeride,detail) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [d.id, d.uid, d.station, d.ts, d.desnivel, d.km, d.horas, d.bajadas, d.vmax, d.vmed, JSON.stringify(d.col), JSON.stringify(d.track), JSON.stringify(d.speed), d.src, d.total || null, t0, t1, d.freeride, d.detail ? JSON.stringify(d.detail) : null]],
+      ...(gps ? passRows(d, d.detail) : [])]);
+    fresh();
     const [after, ps] = await Promise.all([posOf(u.id, 'desnivel', null, 'temporada'), posOf(u.id, 'desnivel', d.station, 'temporada')]);
-    send(res, 200, { day: d, before, after: (after || {}).pos || 0, posStation: (ps || {}).pos || 0 });
+    send(res, 200, { day: d, before: (before || {}).pos || 0, after: (after || {}).pos || 0, posStation: (ps || {}).pos || 0, nov });
+  },
+  'GET /api/day': async ({ res, u, q }) => {   // un día con todo su desglose: el propio o el de alguien visible
+    const d = await one(`SELECT d.*, u.alias alias, u.verified verified, u.hidden hidden, u.banned banned FROM days d JOIN users u ON u.id=d.uid WHERE d.id=?`, [str(q.get('id'), 40)]);
+    if (!d || (d.uid !== u.id && ((VERIFY && d.verified === 0) || d.hidden || d.banned || await blockedEither(u.id, d.uid)))) return send(res, 404, { error: 'Ese día no existe.' });
+    send(res, 200, { id: d.id, uid: d.uid, alias: d.alias, station: d.station, ts: d.ts, t0: d.t0, t1: d.t1, desnivel: d.desnivel, km: d.km, horas: d.horas, bajadas: d.bajadas, vmax: d.vmax, vmed: d.vmed, total: d.total,
+      freeride: d.freeride || 0, col: J(d.col, {}), track: J(d.track), speed: J(d.speed), detail: J(d.detail, null), me: d.uid === u.id });
+  },
+  'GET /api/handle': async ({ res, u, q }) => {   // ¿está libre este @usuario? Si no, propone uno parecido que sí lo esté
+    if (await limited('hd:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
+    const h = handleOf(q.get('h')), bad = badHandle(h), taken = async x => !!(await one('SELECT 1 x FROM users WHERE handle=? AND id!=?', [x, u.id]));
+    if (!bad && !(await taken(h))) return send(res, 200, { ok: true, handle: h });
+    const base = h.replace(/[^a-z0-9._]/g, '').replace(/[._]{2,}/g, '.').replace(/^[._]+|[._]+$/g, '').slice(0, 16) || 'esquiador';
+    let suggest = null;
+    for (const n of [base, ...Array.from({ length: 6 }, () => base + (10 + Math.floor(Math.random() * 990)))]) if (!badHandle(n) && !(await taken(n))) { suggest = n; break; }
+    send(res, 200, { ok: false, error: bad || 'Ese @usuario ya lo tiene otra persona.', suggest });
   },
   'GET /api/users': async ({ res, u, q }) => {
-    const s = str(q.get('q'), 40).trim().toLowerCase().replace(/[%_\\]/g, '');
+    const s = str(q.get('q'), 40).trim().toLowerCase().replace(/^@/, '').replace(/[%_\\]/g, '');
     if (s.length < 2) return send(res, 200, []);
-    const rows = await all(`SELECT id, alias, avatar, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=u.id) following FROM users u WHERE id!=? AND ${pubU()} AND ${notBlocked('u.id')} AND lower(alias) LIKE ? ORDER BY alias LIMIT 10`, [u.id, u.id, u.id, u.id, `%${s}%`]);
+    const rows = await all(`SELECT id, alias, avatar, handle, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=u.id) following FROM users u WHERE id!=? AND ${pubU()} AND ${notBlocked('u.id')} AND (lower(alias) LIKE ? OR handle LIKE ?) ORDER BY alias LIMIT 10`, [u.id, u.id, u.id, u.id, `%${s}%`, `${s}%`]);
     send(res, 200, rows.map(x => ({ ...x, avatar: safeAvatar(x.avatar), following: !!x.following })));
   },
   'POST /api/follow': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
-    const id = str(b.id, 40); if (id === u.id || !(await one('SELECT 1 x FROM users WHERE id=?', [id])) || await blockedEither(u.id, id)) return send(res, 400, { error: 'Usuario no válido.' });
-    const had = (await run('DELETE FROM follows WHERE a=? AND b=?', [u.id, id])).rowsAffected; if (!had) await run('INSERT OR IGNORE INTO follows(a,b) VALUES(?,?)', [u.id, id]);
+    const id = str(b.id, 40);
+    const had = (await run('DELETE FROM follows WHERE a=? AND b=?', [u.id, id])).rowsAffected;   // dejar de seguir vale siempre
+    if (!had) {   // empezar a seguir, solo a cuentas públicas y sin bloqueos
+      if (id === u.id || !(await one(`SELECT 1 x FROM users WHERE id=? AND ${pubCond('')}`, [id])) || await blockedEither(u.id, id)) return send(res, 400, { error: 'Usuario no válido.' });
+      await run('INSERT OR IGNORE INTO follows(a,b) VALUES(?,?)', [u.id, id]);
+    }
     send(res, 200, { following: !had });
   },
   'GET /api/user': async ({ res, u, q }) => {
-    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned FROM users WHERE id=?', [str(q.get('id'), 40)]);
+    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned, handle, since, terrain, wish, gear, club FROM users WHERE id=?', [str(q.get('id'), 40)]);
     if (!t || (t.id !== u.id && ((VERIFY && t.verified === 0) || t.hidden || t.banned || await blockedEither(u.id, t.id)))) return send(res, 404, { error: 'No existe.' });
     const me = t.id === u.id;
-    const [totals, stations, days, pos, stk, followers, following] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT station, ts, desnivel, bajadas, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
+    const [totals, stations, days, pos, stk, followers, following] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT id, station, ts, desnivel, bajadas, freeride, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
       posOf(t.id, 'desnivel', null, 'temporada'), streak(t.id), count('SELECT COUNT(*) n FROM follows WHERE b=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, t.id])]);
-    delete t.verified; delete t.hidden; delete t.banned; send(res, 200, { ...t, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
+    delete t.verified; delete t.hidden; delete t.banned; send(res, 200, { ...t, ...card(t), age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
   },
   'POST /api/kudos': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
-    const id = str(b.id, 40), dd = await one('SELECT uid FROM days WHERE id=?', [id]); if (!dd || await blockedEither(u.id, dd.uid)) return send(res, 404, { error: 'No existe.' });
+    // Solo días que se pueden ver: de cuentas públicas (ni ocultas ni suspendidas ni sin verificar) y sin bloqueos
+    const id = str(b.id, 40), dd = await one(`SELECT d.uid uid FROM days d JOIN users u ON u.id=d.uid WHERE d.id=? AND ${pubU()}`, [id]); if (!dd || await blockedEither(u.id, dd.uid)) return send(res, 404, { error: 'No existe.' });
+    if (dd.uid === u.id) return send(res, 400, { error: 'No puedes dar apoyo a tus propios días.' });
     const had = (await run('DELETE FROM kudos WHERE day=? AND uid=?', [id, u.id])).rowsAffected; if (!had) await run('INSERT OR IGNORE INTO kudos(day,uid) VALUES(?,?)', [id, u.id]);
     send(res, 200, { kudos: await count('SELECT COUNT(*) n FROM kudos WHERE day=?', [id]), liked: !had });
   },
@@ -442,7 +719,7 @@ const routes = {
     if (!(await one("SELECT 1 x FROM reports WHERE reporter=? AND target=? AND COALESCE(day,'')=? AND status='open'", [u.id, target, day || '']))) {
       await run('INSERT INTO reports(id,reporter,target,day,reason,note,ts) VALUES(?,?,?,?,?,?,?)', [rid(), u.id, target, day, reason, note, Date.now()]);
       const n = await count("SELECT COUNT(DISTINCT reporter) n FROM reports WHERE target=? AND status='open'", [target]);
-      if (n >= 3) { await run('UPDATE users SET hidden=1 WHERE id=?', [target]); stationsCache.t = 0; }   // tres personas distintas: se oculta hasta revisarlo
+      if (n >= 3) { await run('UPDATE users SET hidden=1 WHERE id=?', [target]); fresh(); }   // tres personas distintas: se oculta hasta revisarlo
       if (MAIL_READY) for (const a of ADMINS) sendMail(a, 'Nueva denuncia en Pistea', mail('Nueva denuncia', `Motivo: ${reason}. Denuncias abiertas contra ese usuario: ${n}.`, 'Revisar', APP_URL + '/', 'Entra con tu cuenta de administrador y abre Perfil → Moderación.')).catch(() => {});
     }
     await audit(u.id, 'REPORT', req, { reason }); send(res, 200, { ok: true });
@@ -461,13 +738,13 @@ const routes = {
     if (!r) return send(res, 404, { error: 'Esa denuncia ya está resuelta.' });
     const done = (extra = []) => atomic([...extra, ["UPDATE reports SET status='resolved', resolved_by=?, resolved_at=?, action=? WHERE target=? AND status='open'" + (action === 'quitar_dia' ? ' AND day=?' : ''), [u.id, Date.now(), action, r.target, ...(action === 'quitar_dia' ? [r.day] : [])]]]);
     if (action === 'descartar') await done([['UPDATE users SET hidden=0 WHERE id=?', [r.target]]]);
-    else if (action === 'quitar_dia' && r.day) await done([['DELETE FROM kudos WHERE day=?', [r.day]], ['DELETE FROM days WHERE id=?', [r.day]]]);
-    else if (action === 'limpiar_perfil') await done([["UPDATE users SET alias='Esquiador ' || substr(id,1,4), bio='', avatar=NULL, hidden=0 WHERE id=?", [r.target]], ['DELETE FROM avatars WHERE uid=?', [r.target]]]);
+    else if (action === 'quitar_dia' && r.day) await done([['DELETE FROM kudos WHERE day=?', [r.day]], ['DELETE FROM passes WHERE day=?', [r.day]], ['DELETE FROM days WHERE id=?', [r.day]]]);
+    else if (action === 'limpiar_perfil') await done([["UPDATE users SET alias='Esquiador ' || substr(id,1,4), bio='', avatar=NULL, handle=NULL, gear='', club='', hidden=0 WHERE id=?", [r.target]], ['DELETE FROM avatars WHERE uid=?', [r.target]]]);
     else if (action === 'suspender') await done([['UPDATE users SET banned=1 WHERE id=?', [r.target]], ['DELETE FROM tokens WHERE uid=?', [r.target]]]);
     else return send(res, 400, { error: 'Acción no válida.' });
-    stationsCache.t = 0; await audit(u.id, 'MODERATION', req, { action, target: r.target }); send(res, 200, { ok: true });
+    fresh(); await audit(u.id, 'MODERATION', req, { action, target: r.target }); send(res, 200, { ok: true });
   },
-  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY })
+  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/' })
 };
 
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------
@@ -497,8 +774,8 @@ async function serveAvatar(req, res, name) {
   res.writeHead(404); res.end();
 }
 const PAGE_HEADERS = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN', 'Cross-Origin-Opener-Policy': 'same-origin',
-  'Permissions-Policy': 'geolocation=(self), camera=(), microphone=(), payment=(), usb=()',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'" };
+  'Permissions-Policy': `geolocation=(self${MAPS_ORIGIN ? ` "${MAPS_ORIGIN}"` : ''}), camera=(), microphone=(), payment=(), usb=()`,
+  'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'${MAPS_ORIGIN ? ' ' + MAPS_ORIGIN : ''}; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'` };
 
 async function handler(req, res) {
   try {
@@ -509,6 +786,7 @@ async function handler(req, res) {
       res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
       if (DB_ERR) { console.error('[configuración]', DB_ERR); return send(res, 503, { error: 'Servicio no disponible. Inténtalo más tarde.' }); }
       const r = routes[key]; if (!r) return send(res, 404, { error: 'No existe.' });
+      if (burst(ipOf(req))) { res.setHeader('Retry-After', '60'); return send(res, 429, { error: 'Demasiadas peticiones seguidas. Espera un minuto.' }); }
       // Anti-CSRF: toda escritura lleva una cabecera propia (otra web no puede ponerla sin permiso CORS) y no viene de otro sitio
       if (req.method !== 'GET' && (req.headers['x-pistea'] !== '1' || req.headers['sec-fetch-site'] === 'cross-site')) return send(res, 403, { error: 'Petición no permitida.' });
       await dbReady(); housekeeping().catch(() => {});
@@ -521,11 +799,15 @@ async function handler(req, res) {
     if (url.pathname.startsWith('/avatars/')) return await serveAvatar(req, res, url.pathname.slice(9));
     if (url.pathname === '/calc.js' || url.pathname === '/app.js') return serveFile(req, res, path.join(__dirname, 'public'), url.pathname.slice(1), 'no-cache');   // se revalidan siempre: nunca una versión vieja con una página nueva
     if (url.pathname.startsWith('/img/')) return serveFile(req, res, path.join(__dirname, 'public', 'img'), url.pathname.slice(4));
+    if (/^\/seg\/[a-z-]+\.json$/.test(url.pathname)) return serveFile(req, res, path.join(__dirname, 'public', 'seg'), url.pathname.slice(4));   // lo que el motor del día sabe de cada estación
     if (/^\/fonts\/[A-Za-z0-9-]+\.woff2$/.test(url.pathname)) return serveFile(req, res, path.join(__dirname, 'public', 'fonts'), url.pathname.slice(6), 'public, max-age=31536000, immutable');   // Barlow (licencia OFL)
     if (url.pathname === '/3d') { res.writeHead(301, { Location: '/3d/' + url.search }); return res.end(); }
-    if (url.pathname.startsWith('/3d/')) return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
-    if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#0b0c0f', theme_color: '#0b0c0f', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
-    if (url.pathname === '/icon.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0b0c0f"/><path d="M14 74l24-40 16 24 12-16 20 32z" fill="none" stroke="#f4f5f7" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>'); }
+    if (url.pathname.startsWith('/3d/')) {
+      if (MAPS_URL && !/^\/3d\/estaciones\/[a-z-]+\/data\/dem\.u16d$/.test(url.pathname)) { res.writeHead(302, { Location: MAPS_URL + url.pathname.slice(3) + url.search }); return res.end(); }   // enlaces antiguos
+      return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
+    }
+    if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#f3f7fb', theme_color: '#f3f7fb', description: 'Graba tus días de esquí, colecciona las pistas de cada estación y compite con la comunidad.', lang: 'es', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
+    if (url.pathname === '/icon.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0f2a44"/><path d="M14 74l24-40 16 24 12-16 20 32z" fill="none" stroke="#ff5a1f" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>'); }
     const lp = /^\/(privacidad|condiciones|normas|borrar-cuenta)\/?$/.exec(url.pathname);
     if (lp) { res.writeHead(200, LEGAL_HEADERS); return res.end(legal(lp[1], env)); }
     if (url.pathname === '/healthz') { if (DB_ERR) return send(res, 503, { ok: false }); await dbReady(); await run('SELECT 1'); return send(res, 200, { ok: true }); }

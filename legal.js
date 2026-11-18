@@ -2,7 +2,7 @@
 // El responsable y el correo de contacto salen de LEGAL_NAME y LEGAL_EMAIL (ver .env.example).
 // Texto redactado para una app gratuita gestionada por una persona física en España. Revísalo con un profesional si cambian
 // el modelo (pagos, empresa, publicidad) o los proveedores.
-const UPDATED = '16 de noviembre de 2026';
+const UPDATED = '18 de noviembre de 2026';
 const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function page(title, body, env) {
@@ -27,13 +27,14 @@ const PAGES = {
 <tr><td>Perfil opcional: foto, edad, biografía, estación habitual, modalidad y nivel</td><td>Mostrar tu perfil. La edad solo la ves tú</td><td>Ejecución del contrato (art. 6.1.b)</td></tr>
 <tr><td>Ubicación GPS mientras grabas un día</td><td>Calcular tus bajadas, desnivel, distancia y velocidad. La grabación solo funciona cuando tú la empiezas y se para cuando la terminas; nunca en segundo plano sin tu acción</td><td>Consentimiento (art. 6.1.a), que das al pulsar «Traquear» y conceder el permiso de ubicación. Puedes retirarlo en los ajustes del teléfono</td></tr>
 <tr><td>Días de esquí: estación, fecha, cifras del día y un recorrido simplificado sin coordenadas geográficas</td><td>Tu historial, los rankings y la comunidad</td><td>Ejecución del contrato (art. 6.1.b)</td></tr>
+<tr><td>Pistas que has bajado en cada día (calculadas desde la grabación): cuántas veces, metros y velocidad máxima en cada una</td><td>Tu pasaporte de pistas, los récords por pista y tu resumen de temporada</td><td>Ejecución del contrato (art. 6.1.b)</td></tr>
 <tr><td>Traza GPS completa del día</td><td>Comprobar en el servidor que el día es real (antitrampas). Se usa para recalcular las cifras y <b>no se guarda</b></td><td>Interés legítimo en un ranking justo (art. 6.1.f)</td></tr>
 <tr><td>Seguidores, apoyos, bloqueos y denuncias</td><td>Funciones sociales y moderación</td><td>Ejecución del contrato (art. 6.1.b) e interés legítimo en una comunidad segura (art. 6.1.f)</td></tr>
 <tr><td>Registro de seguridad: fecha, dirección IP y tipo de dispositivo de los accesos y cambios en tu cuenta</td><td>Detectar accesos indebidos y frenar ataques</td><td>Interés legítimo en la seguridad (art. 6.1.f)</td></tr></table>
 <p>No vendemos tus datos, no hay publicidad y no hacemos perfiles comerciales.</p>
 
 <h2>3. Qué ven los demás</h2>
-<p>Tu nombre público, foto, biografía, estación habitual, modalidad, nivel, tus cifras y tus días (con el recorrido simplificado) son visibles para otros usuarios. Tu correo, tu edad y tus registros de seguridad no. Hasta que confirmas tu correo no apareces en los rankings ni en la comunidad. Puedes bloquear a cualquier usuario.</p>
+<p>Tu nombre público, foto, biografía, estación habitual, modalidad, nivel, tus cifras y tus días (con el recorrido simplificado) son visibles para otros usuarios. En los récords de cada pista salen tu nombre, tu foto, tu velocidad máxima en ella y cuántas veces la has bajado en la temporada; tu pasaporte completo (todas las pistas que has bajado) solo lo ves tú. Tu correo, tu edad y tus registros de seguridad no. Hasta que confirmas tu correo no apareces en los rankings ni en la comunidad. Puedes bloquear a cualquier usuario.</p>
 
 <h2>4. Cuánto tiempo los guardamos</h2>
 <ul><li>Datos de la cuenta, perfil y días: mientras tengas la cuenta. Al borrarla se eliminan todos en el momento.</li>
@@ -70,7 +71,7 @@ const PAGES = {
 <li>Eres responsable de guardar tu contraseña. Si crees que alguien ha entrado en tu cuenta, cámbiala y cierra la sesión en todos los dispositivos desde Perfil.</li></ul>
 
 <h2>3. Seguridad en la montaña</h2>
-<p><b>No uses la app mientras te deslizas.</b> Empieza la grabación antes de esquiar y guarda el móvil. Respeta las normas de la estación y la señalización. Los rankings no premian la imprudencia: esquía a una velocidad segura para ti y para los demás. Pistea no se hace responsable de accidentes durante la práctica del deporte.</p>
+<p><b>No uses la app mientras te deslizas.</b> Empieza la grabación antes de esquiar y guarda el móvil. Respeta las normas de la estación y la señalización. Los rankings no premian la imprudencia: esquía a una velocidad segura para ti y para los demás. Los récords de velocidad de cada pista son una curiosidad del GPS, no una competición: una pista no es un circuito cerrado, y quien va delante tiene preferencia. Pistea no se hace responsable de accidentes durante la práctica del deporte.</p>
 
 <h2>4. Datos y rankings</h2>
 <p>Las cifras salen del GPS del teléfono y pueden tener errores. Están pensadas para el ocio, no para uso deportivo profesional ni de seguridad. Hacer trampas (datos falsos, simuladores de GPS, días que no has esquiado) está prohibido. Podemos quitar días sospechosos y suspender la cuenta.</p>

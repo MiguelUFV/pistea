@@ -34,6 +34,21 @@ function synthDay({ lat = 40.80, lon = -3.965, runs = 3, start = Date.now() - 3 
   return fx;
 }
 const gpsDay = (o, extra = {}) => ({ station: 'valdesqui', source: 'gps', desnivel: 39999, bajadas: 99, km: 299, vmax: 139, trace: encodeTrace(synthDay(o)), ...extra });
+// Un día de verdad en Valdesquí, sobre su mapa: tres veces el telesilla Bola del Mundo (cola de 1 min) y la pista Bola II
+const { toLatLon, fromPack, heights } = require('./public/calc.js'), PK = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'seg', 'valdesqui.json'), 'utf8'));
+const pairs = a => a.reduce((o, v, i) => (i % 2 ? o[o.length - 1].push(v) : o.push([v]), o), []);
+const BOLA = pairs(PK.l.find(l => l[0] === 'Bola del Mundo')[3]), BOLA2 = pairs(PK.p.filter(p => p[0] === 'Bola II').sort((a, b) => Math.hypot(a[3][0] - BOLA.at(-1)[0], a[3][1] - BOLA.at(-1)[1]) - Math.hypot(b[3][0] - BOLA.at(-1)[0], b[3][1] - BOLA.at(-1)[1]))[0][3]);
+const VALDESQUI = fromPack(PK, heights(require('zlib').gunzipSync(fs.readFileSync(path.join(__dirname, 'mapas', 'estaciones', 'valdesqui', 'data', 'dem.u16d')))));
+const DAY0 = Date.now() - 3 * 36e5;
+function realDay() {
+  const fx = []; let t = DAY0;
+  const at = (x, z, v, dir) => { const p = toLatLon(x, z, PK.geo); fx.push({ t: t += 1000, lat: p.lat, lon: p.lon, alt: null, acc: 5, v, dir, vacc: 0.3, dacc: 5 }); };
+  const go = (pts, v) => { for (let k = 1; k < pts.length; k++) { const [ax, az] = pts[k - 1], [bx, bz] = pts[k], d = Math.hypot(bx - ax, bz - az), dir = (Math.atan2(bx - ax, -(bz - az)) * 180 / Math.PI + 360) % 360; for (let q = 0; q < d; q += v) at(ax + (bx - ax) * q / d, az + (bz - az) * q / d, v, dir); } };
+  const stay = ([x, z], s) => { for (let k = 0; k < s; k++) at(x, z, 0, null); };
+  for (let r = 0; r < 3; r++) { stay(BOLA[0], 60); go(BOLA, 2.3); stay(BOLA.at(-1), 20); go([BOLA.at(-1), ...BOLA2], 9); go([BOLA2.at(-1), BOLA[0]], 1); }
+  return fx;
+}
+const DROP = 3 * (VALDESQUI.elevation(...BOLA2[0]) - VALDESQUI.elevation(...BOLA2.at(-1)));   // el desnivel de verdad: tres veces Bola II
 const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana Test', terms: true };
 (async () => {
   await start();
@@ -80,6 +95,20 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('nombre normal con «puta» dentro de otra palabra', (await A('POST', '/api/me', { alias: 'Disputa Nieve' }))[0] === 200);
   t('biografía ofensiva', (await A('POST', '/api/me', { bio: 'eres un hijo de puta' }))[0] === 400);
   await A('POST', '/api/me', { alias: 'Ana Test' });
+  // --- ficha de esquiador
+  t('nace sin alta guiada', (await A('GET', '/api/me'))[1].user.onboarded === false);
+  [s, j] = await A('POST', '/api/me', { handle: '@Ana.Esquia', since: 2009, terrain: ['pista', 'freeride', 'pista'], wish: ['formigal', 'sierra-nevada'], goal_days: 20, gear: 'Atomic Redster', club: 'CAM Madrid', onboarded: true });
+  t('ficha completa', s === 200 && j.user.handle === 'ana.esquia' && j.user.since === 2009 && j.user.terrain.length === 2 && j.user.wish[1] === 'sierra-nevada' && j.user.goal_days === 20 && j.user.onboarded === true, JSON.stringify(j));
+  t('@usuario ocupado', (await Bx('POST', '/api/me', { handle: 'ana.esquia' }))[0] === 409);
+  t('@usuario ocupado: propone otro', (await Bx('GET', '/api/handle?h=ana.esquia'))[1].suggest?.startsWith('ana.esquia'));
+  t('@usuario libre', (await Bx('GET', '/api/handle?h=bea.oculta'))[1].ok === true);
+  t('@usuario de una estación', (await Bx('POST', '/api/me', { handle: 'sierra.nevada' }))[0] === 400);
+  t('@usuario con formato raro', (await Bx('POST', '/api/me', { handle: 'a..b' }))[0] === 400 && (await Bx('POST', '/api/me', { handle: 'ñu' }))[0] === 400);
+  t('terreno o estaciones inventados', (await A('POST', '/api/me', { terrain: ['volar'] }))[0] === 400 && (await A('POST', '/api/me', { wish: ['marte'] }))[0] === 400);
+  t('reto fuera de rango', (await A('POST', '/api/me', { goal_days: 900 }))[0] === 400);
+  [s, j] = await Bx('GET', '/api/user?id=' + (await A('GET', '/api/me'))[1].user.id);
+  t('la ficha se ve; el reto no', j.handle === 'ana.esquia' && j.club === 'CAM Madrid' && j.goal_days === undefined, JSON.stringify(j));
+  t('buscar por @usuario', (await Bx('GET', '/api/users?q=@ana.es'))[1].some(x => x.handle === 'ana.esquia'));
   // --- bloquear
   const anaId = (await A('GET', '/api/me'))[1].user.id;
   await A('POST', '/api/follow', { id: beaId });
@@ -104,6 +133,8 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('dos denuncias: sigue visible', (await A('GET', '/api/users?q=bea'))[1].length === 1);
   await R2('POST', '/api/report', { target: beaId, reason: 'ofensivo' });
   t('tres personas: se oculta hasta revisarlo', (await A('GET', '/api/users?q=bea'))[1].length === 0 && !(await A('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta'));
+  t('a una cuenta oculta no se la puede seguir…', (await R1('POST', '/api/follow', { id: beaId }))[0] === 400);
+  t('…ni dar apoyo a sus días', (await R1('POST', '/api/kudos', { id: beaDay }))[0] === 404);
   // --- moderación
   t('panel de moderación: no para cualquiera', (await A('GET', '/api/admin/reports'))[0] === 403);
   const M = browser(); await M('POST', '/api/register', { ...REG, email: 'admin@pistea.es', alias: 'Moderador' });
@@ -156,8 +187,9 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('la edad no sale en el perfil público', s === 200 && j.age === null && j.alias === 'Ana Test', s + ' ' + JSON.stringify(j).slice(0, 200));
   t('perfil con XSS en el nombre se limpia', (await A('POST', '/api/me', { alias: 'Ana‮<b>' }))[1].user?.alias === 'Ana <b>');
   [s, j] = await A('GET', '/api/me'); const dayId = j.days[0].id;
-  t('kudos +', (await A('POST', '/api/kudos', { id: dayId }))[1].liked === true);
-  t('kudos -', (await A('POST', '/api/kudos', { id: dayId }))[1].liked === false);
+  t('sin apoyo a un día propio', (await A('POST', '/api/kudos', { id: dayId }))[0] === 400);
+  t('kudos +', (await V('POST', '/api/kudos', { id: dayId }))[1].liked === true);
+  t('kudos -', (await V('POST', '/api/kudos', { id: dayId }))[1].liked === false);
   // --- foto de perfil en la BD
   const png = 'data:image/png;base64,' + Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.alloc(64, 1)]).toString('base64');
   [s, j] = await A('POST', '/api/avatar', { image: png }); t('subir foto', s === 200 && /^\/avatars\/[a-f0-9]{16}\?v=\d+$/.test(j.avatar), JSON.stringify(j));
@@ -169,6 +201,7 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   [s, j, r] = await A('GET', '/api/me/export'); t('exportar mis datos', s === 200 && j.usuario?.email === 'ana@pistea.es' && /attachment/.test(r.headers.get('content-disposition')));
   for (let i = 0; i < 3; i++) await A('POST', '/api/days', day());
   t('límite de 5 días/24 h', (await A('POST', '/api/days', day()))[0] === 429);
+  t('…que se mira antes de recalcular la traza (lo caro)', /Máximo 5 días/.test((await A('POST', '/api/days', gpsDay()))[1].error || ''));
   // --- antitrampas: el servidor recalcula el día desde la traza
   const G = browser(); await G('POST', '/api/register', { ...REG, email: 'gps@pistea.es', alias: 'Gps Real' });
   t('día GPS sin traza', (await G('POST', '/api/days', { station: 'valdesqui', source: 'gps', desnivel: 5000, bajadas: 10 }))[0] === 400);
@@ -177,12 +210,42 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('ubicación simulada', /simuladas/.test((await G('POST', '/api/days', gpsDay({ mock: true })))[1].error || ''));
   t('saltos imposibles', /saltos/.test((await G('POST', '/api/days', gpsDay({ jump: true })))[1].error || ''));
   t('traza de hace un mes', (await G('POST', '/api/days', gpsDay({ start: Date.now() - 30 * 864e5 })))[0] === 400);
-  [s, j] = await G('POST', '/api/days', gpsDay());
+  const RD = realDay(), real = { station: 'valdesqui', source: 'gps', desnivel: 39999, bajadas: 99, km: 299, vmax: 139, trace: encodeTrace(RD) };
+  [s, j] = await G('POST', '/api/days', real);
   t('día GPS real: se guarda', s === 200, JSON.stringify(j).slice(0, 200));
-  t('…con las cifras del servidor, no las del móvil', j.day && j.day.bajadas === 3 && j.day.desnivel > 550 && j.day.desnivel < 700 && j.day.km < 10 && j.day.vmax < 50, JSON.stringify(j.day || {}).slice(0, 160));
-  t('…con el tiempo total de la traza', j.day && Math.abs(j.day.total - 960 / 3600) < 0.01);
-  t('el mismo día dos veces', (await G('POST', '/api/days', gpsDay()))[0] === 409);
-  t('la traza no se guarda (solo el recorrido simplificado)', !(await db.execute('PRAGMA table_info(days)')).rows.some(r => /trace|lat|lon/.test(r.name)) && JSON.parse((await db.execute("SELECT track FROM days WHERE src='gps' LIMIT 1")).rows[0].track).length <= 60);
+  t('…con las cifras del servidor, no las del móvil', j.day && j.day.bajadas === 3 && Math.abs(j.day.desnivel - DROP) < 0.1 * DROP && j.day.km < 6 && j.day.vmax < 45, `${JSON.stringify(j.day || {}).slice(0, 160)} desnivel de verdad ${DROP | 0}`);
+  t('…con el tiempo total de la traza', j.day && Math.abs(j.day.total - (RD.at(-1).t - RD[0].t) / 36e5) < 0.01);
+  const dt = j.day && j.day.detail;
+  t('…con sus pistas y su remonte (motor del servidor)', dt && dt.runs.length === 3 && dt.runs.every(r => /^Bola/.test(r[5].reduce((b, g) => (g[2] > b[2] ? g : b))[1])) && dt.rides.length === 3 && dt.rides.every(r => /Bola del Mundo/.test(r[0])), JSON.stringify(dt || {}).slice(0, 300));
+  t('…y sin freeride por la pista', j.day && j.day.freeride < 0.05 && dt.m.f < 50);
+  t('ver el día con su desglose', (await G('GET', '/api/day?id=' + j.day.id))[1].detail?.runs?.length === 3);
+  t('el mismo día dos veces', (await G('POST', '/api/days', real))[0] === 409);
+  t('la traza no se guarda (solo el recorrido simplificado)', !(await db.execute('PRAGMA table_info(days)')).rows.some(r => /trace|lat|lon/.test(r.name)) && (tr => tr.length <= 500 && tr.every(p => p.length === 3))(JSON.parse((await db.execute("SELECT track FROM days WHERE src='gps' LIMIT 1")).rows[0].track)));
+  t('ranking de freeride', (await G('GET', '/api/rank?metric=freeride'))[0] === 200);
+  // --- pasaporte de pistas, récords por pista y Wrapped (del desglose del día GPS: tres veces Bola II)
+  t('cada tramo lleva su máxima', dt && dt.runs.every(r => r[5].every(g => g.length === 4 && g[3] >= 0)) && dt.runs.some(r => r[5].some(g => /^Bola II/.test(g[1]) && g[3] > 20 && g[3] <= r[4])), JSON.stringify(dt && dt.runs[0][5]));
+  t('al guardar: pista nueva en el pasaporte', j.nov && j.nov.nuevas.some(p => p[0] === 'Bola II'), JSON.stringify(j.nov));
+  const pz = (await db.execute({ sql: 'SELECT piste, n, vmax FROM passes WHERE day=?', args: [j.day.id] })).rows;
+  t('…y su fila en passes (3 bajadas por Bola II, con máxima)', pz.some(r => r.piste === 'Bola II' && Number(r.n) === 3 && r.vmax > 20 && r.vmax < 60), JSON.stringify(pz));
+  const pp = (await G('GET', '/api/passport'))[1];
+  t('pasaporte: Bola II en Valdesquí', (pp.stations.valdesqui || []).some(p => p[0] === 'Bola II' && p[2] === 3) && pp.rank && pp.rank.pos === 1, JSON.stringify(pp).slice(0, 300));
+  const ps = (await G('GET', '/api/piste?station=valdesqui&name=' + encodeURIComponent('Bola II')))[1];
+  t('ficha de pista: primero en velocidad y en bajadas', ps.speed[0] && ps.speed[0].me && ps.runs[0].v === 3 && ps.me.posV === 1 && ps.me.posN === 1 && ps.mine && ps.mine.n === 3 && ps.c === 'a', JSON.stringify(ps).slice(0, 300));
+  t('ficha de pista sin estación', (await G('GET', '/api/piste?station=nada&name=x'))[0] === 400);
+  const rc = (await G('GET', '/api/records?station=valdesqui'))[1];
+  t('récords de la estación', Array.isArray(rc) && rc.some(r => r.name === 'Bola II' && r.v && r.v.me && r.n.n === 3), JSON.stringify(rc).slice(0, 300));
+  const wr = (await G('GET', '/api/wrapped'))[1];
+  t('Wrapped de la temporada', wr.dias === 1 && wr.bajadas === 3 && wr.fav && wr.fav.name === 'Bola II' && wr.fast && wr.fast.pos === 1 && wr.pistes >= 1 && wr.m.a > 0, JSON.stringify(wr).slice(0, 300));
+  t('Wrapped pide sesión', (await browser()('GET', '/api/wrapped'))[0] === 401);
+  // …y quién sale en los récords de una pista: las cuentas públicas, la propia aunque no esté verificada, nunca un bloqueado
+  const H = browser(); await H('POST', '/api/register', { ...REG, email: 'hielo@pistea.es', alias: 'Hielo Rápido' }); await browser()('POST', '/api/verify', { token: linkFor('hielo@pistea.es', 'verify') });
+  t('otro esquiador con el mismo día GPS', (await H('POST', '/api/days', real))[0] === 200);
+  const bola = async X => (await X('GET', '/api/piste?station=valdesqui&name=' + encodeURIComponent('Bola II')))[1].speed.map(x => x.alias);
+  t('récords: sale el verificado y no el que no lo está', (await bola(G)).includes('Hielo Rápido') && !(await bola(H)).includes('Gps Real') && (await bola(G)).includes('Gps Real'));
+  const hId = (await H('GET', '/api/me'))[1].user.id;
+  t('récords: un bloqueado no sale (tampoco desde la caché)', (await G('POST', '/api/block', { id: hId }))[1].blocked === true && !(await bola(G)).includes('Hielo Rápido'));
+  t('…ni en los récords de la estación', !JSON.stringify((await G('GET', '/api/records?station=valdesqui'))[1]).includes('Hielo Rápido'));
+  await G('POST', '/api/block', { id: hId });
   // --- recuperar contraseña
   t('forgot correo inexistente (misma respuesta)', (await browser()('POST', '/api/forgot', { email: 'no@existe.es' }))[0] === 200);
   t('forgot', (await browser()('POST', '/api/forgot', { email: 'ana@pistea.es' }))[0] === 200);
@@ -211,6 +274,7 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   r = await fetch(B + '/app.js'); t('app.js servido y revalidado', r.status === 200 && r.headers.get('cache-control') === 'no-cache' && /text\/javascript/.test(r.headers.get('content-type')));
   t('app.js sin manejadores inline', !/\son(click|submit|input|change)="/.test(await r.text()));
   r = await fetch(B + '/3d/'); t('mapas 3D servidos', r.status === 200 && /html/.test(r.headers.get('content-type')), r.status);
+  r = await fetch(B + '/api/config'); t('sin MAPS_URL, el 3D lo sirve este servidor', (await r.json()).maps === '/3d/');
   r = await fetch(B + '/3d/../server.js'); t('sin salida de carpeta (..)', !/createClient/.test(await r.text()));
   r = await fetch(B + '/3d/%2e%2e/%2e%2e/server.js'); t('sin salida codificada', !/createClient/.test(await r.text()));
   r = await fetch(B + '/avatars/..%2f..%2fserver.js'); t('fotos: sin salida de carpeta', r.status === 404);
@@ -224,6 +288,8 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('borrar cuenta pide contraseña', (await A('DELETE', '/api/me', { password: 'mala' }))[0] === 403);
   t('borrar cuenta', (await A('DELETE', '/api/me', { password: 'Tercera-Clave-33' }))[0] === 200);
   t('tras borrar no hay sesión', (await A('GET', '/api/me'))[0] === 401);
+  const pasLeft = async () => (await db.execute('SELECT (SELECT COUNT(*) FROM passes WHERE uid NOT IN (SELECT id FROM users)) huerf, (SELECT COUNT(*) FROM passes) n')).rows[0];
+  t('borrar la cuenta del día GPS se lleva su pasaporte (y no el de otros)', (await G('DELETE', '/api/me', { password: REG.password }))[0] === 200 && await pasLeft().then(r => Number(r.huerf) === 0 && Number(r.n) > 0));
   const left = (await db.execute("SELECT (SELECT COUNT(*) FROM days WHERE uid NOT IN (SELECT id FROM users)) d, (SELECT COUNT(*) FROM follows WHERE a NOT IN (SELECT id FROM users)) f, (SELECT COUNT(*) FROM users WHERE email='ana@pistea.es') u")).rows[0];
   t('no quedan sus datos', left.d === 0 && left.f === 0 && left.u === 0, JSON.stringify(left));
   // --- límites que sobreviven a un reinicio (guardados en la BD)
