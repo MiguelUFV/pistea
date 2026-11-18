@@ -6,16 +6,16 @@
   "titulo": "Estación de Alto Campoo.jpg"
  },
  "astun": {
-  "autor": "Luistxo eta Marije",
+  "autor": "Mikel Ortega",
   "licencia": "CC BY-SA 2.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Astun.jpg",
-  "titulo": "Astun.jpg"
+  "url": "https://commons.wikimedia.org/wiki/File:Ast%C3%BAn.jpg",
+  "titulo": "Astún.jpg"
  },
  "baqueira-beret": {
-  "autor": "Cantabrucu",
-  "licencia": "CC0",
-  "url": "https://commons.wikimedia.org/wiki/File:Baqueira-Beret_07.jpg",
-  "titulo": "Baqueira-Beret 07.jpg"
+  "autor": "Faras",
+  "licencia": "CC BY-SA 4.0",
+  "url": "https://commons.wikimedia.org/wiki/File:Baqueira_1800.jpg",
+  "titulo": "Baqueira 1800.jpg"
  },
  "boi-taull": {
   "autor": "Autor desconocido",
@@ -36,10 +36,10 @@
   "titulo": "Ampriu - Cerler.jpg"
  },
  "formigal": {
-  "autor": "Autor desconocido",
-  "licencia": "CC BY-SA 3.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Canal_d%27Izas_(Fornigal,_Uesca).jpg",
-  "titulo": "Canal d'Izas (Fornigal, Uesca).jpg"
+  "autor": "es.topsportholidays.com",
+  "licencia": "CC BY-SA 2.0",
+  "url": "https://commons.wikimedia.org/wiki/File:Vista_urbanizaci%C3%B3n_Formigal_desde_las_pistas.jpg",
+  "titulo": "Vista urbanización Formigal desde las pistas.jpg"
  },
  "fuentes-de-invierno": {
   "autor": "NibasH",
@@ -54,11 +54,10 @@
   "titulo": "EXCURSIÓN A LA COVATILLA 4(Bejar).jpg"
  },
  "la-molina": {
-  "autor": "Rémih",
-  "licencia": "CC BY-SA 4.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Cambra_d%27Ase_@_Pyr%C3%A9n%C3%A9es_2000.jpg",
-  "titulo": "Cambra d'Ase @ Pyrénées 2000.jpg",
-  "ambiente": true
+  "autor": "Antonio De Lorenzo",
+  "licencia": "CC BY 2.5",
+  "url": "https://commons.wikimedia.org/wiki/File:Molina_La2.JPG",
+  "titulo": "Molina La2.JPG"
  },
  "la-pinilla": {
   "autor": "Carlos Delgado",
@@ -73,16 +72,16 @@
   "titulo": "Cabeza de Manzaneda - panoramio (2).jpg"
  },
  "masella": {
-  "autor": "Rémih",
-  "licencia": "CC BY-SA 4.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Masella_@_Enveitg.jpg",
-  "titulo": "Masella @ Enveitg.jpg"
+  "autor": "Vriullop",
+  "licencia": "CC BY-SA 3.0",
+  "url": "https://commons.wikimedia.org/wiki/File:La_Tosa_Ger_4.JPG",
+  "titulo": "La Tosa Ger 4.JPG"
  },
  "panticosa": {
   "autor": "Autor desconocido",
   "licencia": "CC BY-SA 3.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Aram%C3%B3n_Panticosa_Telecabina.jpg",
-  "titulo": "Aramón Panticosa Telecabina.jpg"
+  "url": "https://commons.wikimedia.org/wiki/File:Bal_de_Tena_(Pandicosa).jpg",
+  "titulo": "Bal de Tena (Pandicosa).jpg"
  },
  "port-aine": {
   "autor": "Jordiferrer",
@@ -99,14 +98,15 @@
  "san-isidro": {
   "autor": "acebal",
   "licencia": "CC BY 2.0",
-  "url": "https://commons.wikimedia.org/wiki/File:PicoAgujas.jpg",
-  "titulo": "PicoAgujas.jpg"
+  "url": "https://www.flickr.com/photos/62178683@N00/318724510",
+  "titulo": "Vista de Cebolledo",
+  "fuente": "Flickr"
  },
  "sierra-nevada": {
-  "autor": "SchiDD",
-  "licencia": "CC BY-SA 4.0",
-  "url": "https://commons.wikimedia.org/wiki/File:E-Sierra-Nevada-2.jpg",
-  "titulo": "E-Sierra-Nevada-2.jpg"
+  "autor": "Emilio J. Rodríguez Posada",
+  "licencia": "CC BY-SA 3.0",
+  "url": "https://commons.wikimedia.org/wiki/File:Sierra_Nevada_Espa%C3%B1a_(Spain)_10.JPG",
+  "titulo": "Sierra Nevada España (Spain) 10.JPG"
  },
  "valdelinares": {
   "autor": "Pacopac",
@@ -121,30 +121,30 @@
   "titulo": "P1271366.JPG"
  },
  "valdezcaray": {
-  "autor": "Dantart",
-  "licencia": "CC BY-SA 4.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Moncayo_Nevado.jpg",
-  "titulo": "Moncayo Nevado.jpg",
-  "ambiente": true
+  "autor": "Generada con IA (Canva)",
+  "licencia": "Imagen ilustrativa",
+  "url": "",
+  "titulo": "Imagen ilustrativa de Valdezcaray",
+  "ia": true
  },
  "valgrande-pajares": {
-  "autor": "User:Dantadd",
-  "licencia": "Public domain",
-  "url": "https://commons.wikimedia.org/wiki/File:Pajares4.jpg",
-  "titulo": "Pajares4.jpg"
+  "autor": "Igor Rico",
+  "licencia": "CC BY-SA 3.0 es",
+  "url": "https://commons.wikimedia.org/wiki/File:De_camino_a_Valgrande_(1).JPG",
+  "titulo": "De camino a Valgrande (1).JPG"
  },
  "vall-de-nuria": {
-  "autor": "Phil Richards from London, UK",
-  "licencia": "CC BY-SA 2.0",
-  "url": "https://commons.wikimedia.org/wiki/File:19.03.06_N%C3%BAria_FGC_A8_(6076631153).jpg",
-  "titulo": "19.03.06 Núria FGC A8 (6076631153).jpg"
+  "autor": "Nil Sanmartí",
+  "licencia": "Public domain",
+  "url": "https://commons.wikimedia.org/wiki/File:Estaci%C3%B3_d%27esqu%C3%AD_de_Vall_de_N%C3%BAria.JPG",
+  "titulo": "Estació d'esquí de Vall de Núria.JPG"
  },
  "vallter": {
-  "autor": "Jack ma",
-  "licencia": "CC BY-SA 3.0",
-  "url": "https://commons.wikimedia.org/wiki/File:Bolquere_pyr2000_1.JPG",
-  "titulo": "Bolquere pyr2000 1.JPG",
-  "ambiente": true
+  "autor": "Generada con IA (Canva)",
+  "licencia": "Imagen ilustrativa",
+  "url": "",
+  "titulo": "Imagen ilustrativa de Vallter",
+  "ia": true
  },
  "espot": {
   "autor": "sena_fuhur",
@@ -154,11 +154,10 @@
   "ambiente": true
  },
  "javalambre": {
-  "autor": "Marc Climent\n\n\nCamera location41° 48′ 43.01″ N, 1° 41′ 43.88″ W View this and ot",
-  "licencia": "CC BY 2.0",
-  "url": "https://commons.wikimedia.org/wiki/File:El_Moncayo.jpg",
-  "titulo": "El Moncayo.jpg",
-  "ambiente": true
+  "autor": "Pacopac",
+  "licencia": "CC BY-SA 4.0",
+  "url": "https://commons.wikimedia.org/wiki/File:2022-01-22_Estaci%C3%B3_d%27esqu%C3%AD_de_Javalambre_09.jpg",
+  "titulo": "2022-01-22 Estació d'esquí de Javalambre 09.jpg"
  },
  "leitariegos": {
   "autor": "ROSUROB",
