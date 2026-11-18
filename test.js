@@ -294,6 +294,67 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   }
   t('privacidad cita encargados y AEPD', /Turso/.test(await (await fetch(B + '/privacidad')).text()) );
   t('salud con BD', (await (await fetch(B + '/healthz')).json()).ok === true);
+  // --- parte social: solicitudes, listas, avisos, sugerencias
+  await db.execute('DELETE FROM hits');   // el alta está limitada por conexión: se empieza de cero para sembrar cuentas
+  const mk = async (em, al) => { const X = browser(); await X('POST', '/api/register', { ...REG, email: em, alias: al }); await browser()('POST', '/api/verify', { token: linkFor(em, 'verify') }); X.id = (await X('GET', '/api/me'))[1].user.id; return X; };
+  const P = await mk('p@pistea.es', 'Pau Pública'), Q = await mk('q@pistea.es', 'Quim Cerrado'), W = await mk('w@pistea.es', 'Wanda Tercera'), Y = await mk('y@pistea.es', 'Yago Cuarto');
+  t('seguir a una cuenta normal es directo', (await P('POST', '/api/follow', { id: W.id }))[1].following === true);
+  t('seguirse a uno mismo no', (await P('POST', '/api/follow', { id: P.id }))[0] === 400);
+  [s, j] = await W('GET', '/api/activity');
+  t('aviso de nuevo seguidor, sin ver', j.items.length === 1 && j.items[0].kind === 'follow' && j.items[0].alias === 'Pau Pública' && j.items[0].fresh === true && j.unseen === 1 && j.items[0].iFollow === false && j.items[0].requested === false, JSON.stringify(j));
+  await P('POST', '/api/follow', { id: W.id }); await P('POST', '/api/follow', { id: W.id });   // dejar de seguir y volver: el aviso no se duplica
+  t('dejar y volver a seguir no duplica el aviso', (await W('GET', '/api/activity'))[1].items.length === 1);
+  [s, j] = await W('POST', '/api/activity/seen'); t('marcar los avisos como vistos', s === 200 && j.unseen === 0 && (await W('GET', '/api/social'))[1].unseen === 0 && (await W('GET', '/api/activity'))[1].items[0].fresh === false);
+  t('aprobar seguidores: valor no booleano', (await Q('POST', '/api/me', { approve: 'sí' }))[0] === 400);
+  t('aprobar seguidores: se activa', (await Q('POST', '/api/me', { approve: true }))[1].user.approve === true);
+  [s, j] = await P('POST', '/api/follow', { id: Q.id });
+  t('seguir a una cuenta que aprueba: queda como solicitud', s === 200 && j.following === false && j.requested === true, JSON.stringify(j));
+  [s, j] = await P('GET', '/api/user?id=' + Q.id);
+  t('su perfil dice que está solicitado y que no se puede ver con quién esquía', j.requested === true && j.following === false && j.approve === true && j.canList === false && j.followers === 0);
+  t('sus listas, cerradas a quien no la sigue', (await P('GET', `/api/connections?id=${Q.id}&kind=followers`))[0] === 403 && (await P('GET', `/api/connections?id=${Q.id}&kind=following`))[0] === 403);
+  [s, j] = await Q('GET', '/api/requests'); t('la solicitud le llega', j.length === 1 && j[0].id === P.id && j[0].alias === 'Pau Pública', JSON.stringify(j));
+  t('la solicitud suma en su campana', (await Q('GET', '/api/social'))[1].requests === 1 && (await Q('GET', '/api/me'))[1].social.requests === 1);
+  t('con solicitud pendiente, el seguimiento no existe', (await Q('GET', '/api/me'))[1].followers === 0 && (await P('GET', '/api/me'))[1].following === 1);
+  t('el mismo botón cancela la solicitud', (await P('POST', '/api/follow', { id: Q.id }))[1].requested === false && (await Q('GET', '/api/requests'))[1].length === 0);
+  await P('POST', '/api/follow', { id: Q.id });
+  t('rechazar: no hay seguimiento ni aviso', (await Q('POST', '/api/requests', { id: P.id, accept: false }))[1].requests === 0 && (await P('GET', '/api/user?id=' + Q.id))[1].following === false && (await P('GET', '/api/activity'))[1].items.every(x => x.kind !== 'accepted'));
+  t('rechazar otra vez: la solicitud ya no existe', (await Q('POST', '/api/requests', { id: P.id, accept: false }))[0] === 404);
+  await P('POST', '/api/follow', { id: Q.id });
+  [s, j] = await Q('POST', '/api/requests', { id: P.id, accept: true });
+  t('aceptar: ya la sigue', s === 200 && j.followers === 1 && j.requests === 0 && (await P('GET', '/api/user?id=' + Q.id))[1].following === true);
+  [s, j] = await P('GET', '/api/activity');
+  t('y le llega el aviso de que aceptó', j.items[0].kind === 'accepted' && j.items[0].alias === 'Quim Cerrado' && j.items[0].iFollow === true && j.unseen === 1, JSON.stringify(j.items[0]));
+  t('quien la sigue ya ve sus listas; los demás no', (await P('GET', `/api/connections?id=${Q.id}&kind=followers`))[0] === 200 && (await W('GET', `/api/connections?id=${Q.id}&kind=followers`))[0] === 403);
+  [s, j] = await Q('GET', '/api/connections?kind=followers');
+  t('mis seguidores', s === 200 && j.mine === true && j.total === 1 && j.items[0].id === P.id && j.items[0].followsMe === true && j.items[0].iFollow === false, JSON.stringify(j));
+  [s, j] = await P('GET', '/api/connections?kind=following');
+  t('a quién sigo (con cómo me tratan ellos)', j.total === 2 && j.items.some(x => x.id === Q.id && x.approve === true && x.iFollow === true) && j.items.some(x => x.id === W.id && x.followsMe === false), JSON.stringify(j));
+  t('buscar dentro de la lista', (await P('GET', '/api/connections?kind=following&q=wand'))[1].items.map(x => x.id).join() === W.id && (await P('GET', '/api/connections?kind=following&q=zzz'))[1].total === 0);
+  [s, j] = await P('GET', `/api/connections?id=${Q.id}&kind=followers`); t('en la lista de otra persona me veo a mí, sin botón', j.items.length === 1 && j.items[0].me === true);
+  t('lista de quien no existe', (await P('GET', '/api/connections?id=nadie&kind=followers'))[0] === 404);
+  [s, j] = await W('GET', '/api/suggest'); t('sugerencias: quien te sigue y tú no', j.some(x => x.id === P.id && /Te sigue/.test(x.why)), JSON.stringify(j));
+  await W('POST', '/api/follow', { id: P.id }); await Y('POST', '/api/follow', { id: W.id });
+  [s, j] = await Y('GET', '/api/suggest'); t('sugerencias: amigos en común, y nadie a quien ya sigues', j.some(x => x.id === P.id && /1 amigo en común/.test(x.why)) && !j.some(x => x.id === W.id || x.id === Y.id), JSON.stringify(j));
+  await Y('POST', '/api/follow', { id: Q.id });   // solicitud de Yago a Quim
+  t('quitar a un seguidor', (await Q('POST', '/api/followers/remove', { id: P.id }))[1].followers === 0 && (await P('GET', '/api/user?id=' + Q.id))[1].following === false);
+  t('quitarlo dos veces', (await Q('POST', '/api/followers/remove', { id: P.id }))[0] === 404);
+  t('una cuenta sin seguir no se puede quitar', (await Q('POST', '/api/followers/remove', { id: Y.id }))[0] === 404);
+  t('apagar la aprobación acepta las solicitudes pendientes', (await Q('POST', '/api/me', { approve: false }))[1].user.approve === false && (await Y('GET', '/api/user?id=' + Q.id))[1].following === true && (await Q('GET', '/api/requests'))[1].length === 0 && (await Y('GET', '/api/activity'))[1].items.some(x => x.kind === 'accepted'));
+  await Q('POST', '/api/me', { approve: true }); await P('POST', '/api/follow', { id: Q.id });
+  t('bloquear borra la solicitud y los avisos entre los dos', (await Q('POST', '/api/block', { id: P.id }))[1].blocked === true && (await Q('GET', '/api/requests'))[1].length === 0 && (await db.execute({ sql: 'SELECT COUNT(*) n FROM follow_requests WHERE (a=? AND b=?) OR (a=? AND b=?)', args: [P.id, Q.id, Q.id, P.id] })).rows[0].n === 0);
+  t('el bloqueado no puede pedir seguir', (await P('POST', '/api/follow', { id: Q.id }))[0] === 400);
+  await Q('POST', '/api/block', { id: P.id });
+  const wd = (await W('POST', '/api/days', day()))[1].day.id;
+  t('apoyo a un día: avisa a su dueña', (await P('POST', '/api/kudos', { id: wd }))[1].liked === true && (await W('GET', '/api/activity'))[1].items.some(x => x.kind === 'kudo' && x.day === wd && x.station === 'valdesqui' && x.alias === 'Pau Pública'));
+  await P('POST', '/api/kudos', { id: wd });
+  t('quitar el apoyo quita el aviso', !(await W('GET', '/api/activity'))[1].items.some(x => x.kind === 'kudo'));
+  const exp = await (await fetch(B + '/api/me/export', { headers: { Cookie: Object.entries(W.jar).map(([k, v]) => `${k}=${v}`).join('; ') } })).json();
+  t('mis datos incluyen seguidores y solicitudes', exp.seguidores.includes('Pau Pública') && Array.isArray(exp.solicitudes_de_seguimiento_pendientes));
+  // Yago pide seguir a Quim (cerrado), y luego Yago borra su cuenta: no quedan ni solicitudes ni avisos huérfanos
+  await Q('POST', '/api/me', { approve: true }); await Y('POST', '/api/follow', { id: Q.id }); await Y('POST', '/api/follow', { id: Q.id });   // deja de seguir y vuelve a pedirlo: solicitud pendiente
+  t('Yago tiene una solicitud pendiente y un aviso a Wanda', (await Q('GET', '/api/requests'))[1].some(x => x.id === Y.id) && (await W('GET', '/api/activity'))[1].items.some(x => x.alias === 'Yago Cuarto'));
+  const orf = async () => (await db.execute('SELECT (SELECT COUNT(*) FROM follow_requests WHERE a NOT IN (SELECT id FROM users) OR b NOT IN (SELECT id FROM users)) r, (SELECT COUNT(*) FROM notifs WHERE uid NOT IN (SELECT id FROM users) OR actor NOT IN (SELECT id FROM users)) n')).rows[0];
+  t('borrar la cuenta se lleva solicitudes y avisos', (await Y('DELETE', '/api/me', { password: REG.password }))[0] === 200 && await orf().then(r => Number(r.r) === 0 && Number(r.n) === 0));
   // --- borrar la cuenta (derecho de supresión)
   t('borrar cuenta pide contraseña', (await A('DELETE', '/api/me', { password: 'mala' }))[0] === 403);
   t('borrar cuenta', (await A('DELETE', '/api/me', { password: 'Tercera-Clave-33' }))[0] === 200);

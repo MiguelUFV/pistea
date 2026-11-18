@@ -7,7 +7,7 @@ const { Calc, decodeTrace, fromPack, heights } = require('./public/calc.js'), GE
 const env = process.env, PORT = +env.PORT || 3000, PROD = env.NODE_ENV === 'production', VERCEL = !!env.VERCEL, TRUST = env.TRUST_PROXY === '1';
 const APP_URL = (env.APP_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + env.VERCEL_PROJECT_PRODUCTION_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 const DATA = env.DATA_DIR || __dirname, AVATARS_DIR = path.join(DATA, 'avatars');
-const MAPS = env.MAPS_DIR || (fs.existsSync(path.join(__dirname, 'mapas')) ? path.join(__dirname, 'mapas') : path.resolve(__dirname, '../../Estaciones3D/web/dist/app'));
+const MAPS = env.MAPS_DIR || (fs.existsSync(path.join(__dirname, 'mapas')) ? path.join(__dirname, 'mapas') : path.resolve(__dirname, '../Estaciones3D/web/dist/app'));
 // En producción el 3D se sirve desde Cloudflare Pages (MAPS_URL): sin límite de tráfico y fuera de la función de Vercel, que
 // solo lleva el relieve (dem.u16d) para el motor del día. Sin MAPS_URL (en local o con Docker), lo sirve este servidor.
 const MAPS_URL = (env.MAPS_URL || (VERCEL ? 'https://pistea-mapas.pages.dev' : '')).replace(/\/$/, ''), MAPS_ORIGIN = MAPS_URL && new URL(MAPS_URL).origin;
@@ -38,6 +38,9 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS days(id TEXT PRIMARY KEY, uid TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, station TEXT NOT NULL, ts INTEGER NOT NULL, desnivel REAL, km REAL, horas REAL, bajadas INTEGER, vmax REAL, vmed REAL, col TEXT, track TEXT, speed TEXT, src TEXT DEFAULT 'gps', total REAL, t0 INTEGER, t1 INTEGER)`,
   `CREATE TABLE IF NOT EXISTS kudos(day TEXT REFERENCES days(id) ON DELETE CASCADE, uid TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(day, uid))`,
   `CREATE TABLE IF NOT EXISTS follows(a TEXT REFERENCES users(id) ON DELETE CASCADE, b TEXT REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY(a, b))`,
+  // Solicitudes de seguimiento a cuentas que aprueban a sus seguidores (a pide seguir a b) y avisos de actividad (follow, accepted, kudo)
+  `CREATE TABLE IF NOT EXISTS follow_requests(a TEXT NOT NULL, b TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY(a, b))`,
+  `CREATE TABLE IF NOT EXISTS notifs(id TEXT PRIMARY KEY, uid TEXT NOT NULL, kind TEXT NOT NULL, actor TEXT NOT NULL, day TEXT, ts INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS audit_logs(id TEXT PRIMARY KEY, uid TEXT, action TEXT NOT NULL, ip TEXT NOT NULL, ua TEXT, details TEXT, ts INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS avatars(uid TEXT PRIMARY KEY, mime TEXT NOT NULL, data BLOB NOT NULL, updated INTEGER NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS hits(k TEXT NOT NULL, ts INTEGER NOT NULL)`,
@@ -52,11 +55,13 @@ const ALTERS = [['users', 'avatar TEXT'], ['users', 'age INTEGER'], ['users', 'b
   // equipo, club o escuela y si ya pasó el alta guiada
   ['users', 'handle TEXT'], ['users', 'since INTEGER'], ['users', 'terrain TEXT'], ['users', 'wish TEXT'], ['users', 'goal_days INTEGER'], ['users', 'gear TEXT'], ['users', 'club TEXT'], ['users', 'onboarded INTEGER'],
   ['days', 'freeride REAL'], ['days', 'detail TEXT'],   // km fuera de pista y el desglose del día (bajadas con sus pistas, remontes, metros por color)
+  ['users', 'approve INTEGER'], ['users', 'notif_seen INTEGER'], ['follows', 'ts INTEGER'],   // aprobar seguidores; hasta cuándo ha visto sus avisos; cuándo empezó a seguir
   ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
 const INDEXES = ['CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts)', 'CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts)',
   'CREATE INDEX IF NOT EXISTS i_tokens_uid ON tokens(uid)', 'CREATE INDEX IF NOT EXISTS i_audit_uid ON audit_logs(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_audit_ts ON audit_logs(ts)',
   'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)', 'CREATE INDEX IF NOT EXISTS i_blocks_b ON blocks(b)', 'CREATE INDEX IF NOT EXISTS i_reports ON reports(status, target)',
-  'CREATE UNIQUE INDEX IF NOT EXISTS u_users_handle ON users(handle)',
+  'CREATE UNIQUE INDEX IF NOT EXISTS u_users_handle ON users(handle)', 'CREATE INDEX IF NOT EXISTS i_follows_a ON follows(a)',
+  'CREATE INDEX IF NOT EXISTS i_freq_b ON follow_requests(b, ts)', 'CREATE INDEX IF NOT EXISTS i_notifs ON notifs(uid, ts)',
   'CREATE INDEX IF NOT EXISTS i_passes_st ON passes(station, piste, ts)', 'CREATE INDEX IF NOT EXISTS i_passes_uid ON passes(uid, station)'];   // el @usuario es único (NULL, sin elegir, se puede repetir)
 async function init() {
   if (DB_URL.startsWith('file:')) await run('PRAGMA journal_mode=WAL').catch(() => {});
@@ -280,7 +285,7 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const normEmail = v => str(v, 254).trim().toLowerCase();
 const safeAvatar = a => typeof a === 'string' && /^\/avatars\/[a-z0-9_.]+(\?v=\d+)?$/.test(a) ? a : null;
 const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified, admin: isAdmin(u) || undefined,
-  ...card(u), goal_days: u.goal_days || null, onboarded: !!u.onboarded });
+  ...card(u), goal_days: u.goal_days || null, onboarded: !!u.onboarded, approve: !!u.approve });
 // Lo público de la ficha de esquiador (el reto de días es solo para uno mismo)
 const card = u => ({ handle: u.handle || null, since: u.since || null, terrain: J(u.terrain), wish: J(u.wish), gear: u.gear || '', club: u.club || '' });
 // @usuario: 3 a 20 letras minúsculas, cifras, punto o guion bajo, empezando y acabando en letra o cifra. Los nombres de la
@@ -319,6 +324,22 @@ function weakPw(pw, email, alias) {
 const ADMINS = new Set(String(env.ADMIN_EMAILS || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean));   // correos que moderan
 const isAdmin = u => !!u && ADMINS.has(u.email) && u.verified !== 0;
 const blockedEither = async (a, b) => !!(await one('SELECT 1 x FROM blocks WHERE (a=? AND b=?) OR (a=? AND b=?)', [a, b, b, a]));
+// ---- parte social: avisos, solicitudes y listas de seguidores
+// Un aviso por (quién, qué, de qué día): si se repite (dejar de seguir y volver a seguir) no se acumula, solo sube al principio
+const notify = async (uid, kind, actor, day = null) => { if (uid === actor) return; await atomic([["DELETE FROM notifs WHERE uid=? AND kind=? AND actor=? AND COALESCE(day,'')=?", [uid, kind, actor, day || '']], ['INSERT INTO notifs(id,uid,kind,actor,day,ts) VALUES(?,?,?,?,?,?)', [rid(), uid, kind, actor, day, Date.now()]]]); };
+const unnotify = (uid, kind, actor, day = null) => run("DELETE FROM notifs WHERE uid=? AND kind=? AND actor=? AND COALESCE(day,'')=?", [uid, kind, actor, day || '']);
+// Lo que pinta la campana: avisos sin ver (de cuentas visibles) y solicitudes pendientes de contestar
+const socialOf = async id => {
+  const seen = ((await one('SELECT notif_seen s FROM users WHERE id=?', [id])) || {}).s || 0;
+  const [unseen, requests] = await Promise.all([
+    count(`SELECT COUNT(*) n FROM notifs n JOIN users x ON x.id=n.actor WHERE n.uid=? AND n.ts>? AND ${pubCond('x.')}`, [id, seen]),
+    count(`SELECT COUNT(*) n FROM follow_requests r JOIN users x ON x.id=r.a WHERE r.b=? AND ${pubCond('x.')}`, [id])]);
+  return { unseen, requests };
+};
+// Una persona tal como la ve la interfaz en listas y avisos
+const person = r => ({ id: r.id, alias: r.alias, avatar: safeAvatar(r.avatar), handle: r.handle || null, level: r.level || null, home: r.home || null, approve: !!r.approve, iFollow: !!r.iFollow, followsMe: !!r.followsMe, requested: !!r.requested, ts: r.ts || null });
+// Las tres columnas que dicen cómo está la relación entre quien mira (?) y la persona x: sigo, me sigue, he pedido seguir
+const REL = 'EXISTS(SELECT 1 FROM follows WHERE a=? AND b=x.id) iFollow, EXISTS(SELECT 1 FROM follows WHERE a=x.id AND b=?) followsMe, EXISTS(SELECT 1 FROM follow_requests WHERE a=? AND b=x.id) requested';
 const MAIL_READY = !!(env.BREVO_API_KEY || env.RESEND_API_KEY);
 const VERIFY = MAIL_READY || !PROD;   // sin correo en producción no se puede exigir la verificación (nadie podría verificarse)
 const FROM = (() => { const m = String(env.MAIL_FROM || '').match(/^\s*(.*?)\s*<([^>]+)>\s*$/); return m ? { name: m[1] || 'Pistea', email: m[2] } : { name: 'Pistea', email: env.MAIL_FROM || 'onboarding@resend.dev' }; })();
@@ -440,7 +461,7 @@ const routes = {
     const [totals, stations, days, pos, stk, lg, following, followers, sessions, seasonDays] = await Promise.all([agg(u.id), stationsDistinct(u.id), all('SELECT id,station,ts,desnivel,km,horas,bajadas,vmax,freeride FROM days WHERE uid=? ORDER BY ts DESC LIMIT 30', [u.id]),
       posOf(u.id, 'desnivel', null, 'temporada'), streak(u.id), league(u.id), count('SELECT COUNT(*) n FROM follows WHERE a=?', [u.id]), count('SELECT COUNT(*) n FROM follows WHERE b=?', [u.id]), count('SELECT COUNT(*) n FROM tokens WHERE uid=? AND exp>?', [u.id, Date.now()]),
       count(`SELECT COUNT(*) n FROM days WHERE uid=? AND ts>=? AND ${SRC}`, [u.id, season])]);
-    send(res, 200, { user: clean(u), totals, stations, days, pos: (pos || {}).pos || 0, streak: stk, league: lg, following, followers, sessions, seasonDays });
+    send(res, 200, { user: clean(u), totals, stations, days, pos: (pos || {}).pos || 0, streak: stk, league: lg, following, followers, sessions, seasonDays, social: await socialOf(u.id) });
   },
   'POST /api/me': async ({ req, res, u, b }) => {
     const updates = [], params = [], audited = [];
@@ -473,11 +494,18 @@ const routes = {
       audited.push('goal_days');
     }
     for (const k of ['gear', 'club']) if (b[k] !== undefined) { const v = text(b[k], 60); if (offensive(v)) return send(res, 400, { error: k === 'gear' ? 'El equipo tiene palabras que no están permitidas.' : 'El club tiene palabras que no están permitidas.' }); updates.push(k + '=?'); params.push(v); audited.push(k); }
+    if (b.approve !== undefined) { if (typeof b.approve !== 'boolean') return send(res, 400, { error: 'Valor no válido.' }); updates.push('approve=?'); params.push(b.approve ? 1 : 0); audited.push('approve'); }
     if (b.onboarded === true) updates.push('onboarded=1');
     if (!updates.length) return send(res, 400, { error: 'No hay campos que actualizar.' });
     updates.push('updated_at=?'); params.push(Date.now(), u.id);
     try { await run(`UPDATE users SET ${updates.join(', ')} WHERE id=?`, params); }   // los nombres de columna son fijos; los valores van como parámetros
     catch (err) { if (/UNIQUE/i.test(err.message)) return send(res, 409, { error: 'Ese @usuario ya lo tiene otra persona. Prueba con otro.' }); throw err; }
+    // Quien deja de aprobar seguidores acepta de golpe las solicitudes que tenía pendientes (como hace Instagram al pasar a pública)
+    if (b.approve === false) {
+      const pend = (await all(`SELECT r.a id FROM follow_requests r JOIN users x ON x.id=r.a WHERE r.b=? AND ${pubCond('x.')}`, [u.id])).map(r => r.id), now = Date.now();
+      await atomic([...pend.map(id => ['INSERT OR IGNORE INTO follows(a,b,ts) VALUES(?,?,?)', [id, u.id, now]]), ['DELETE FROM follow_requests WHERE b=?', [u.id]]]);
+      for (const id of pend) await notify(id, 'accepted', u.id);
+    }
     await audit(u.id, 'PROFILE_UPDATE', req, { campos: audited });
     send(res, 200, { ok: true, user: clean(await one('SELECT * FROM users WHERE id=?', [u.id])) });
   },
@@ -506,6 +534,8 @@ const routes = {
     const data = { aviso: 'Exportación de tus datos en Pistea (art. 15 y 20 RGPD).', fecha: new Date().toISOString(), usuario: clean(u), dias: days,
       pasaporte_de_pistas: await all('SELECT day dia, station estacion, piste pista, c color, n bajadas, m metros, vmax velocidad_max_kmh, ts FROM passes WHERE uid=? ORDER BY ts ASC', [u.id]),
       siguiendo: (await all('SELECT u.alias alias FROM follows f JOIN users u ON u.id=f.b WHERE f.a=?', [u.id])).map(r => r.alias),
+      seguidores: (await all('SELECT u.alias alias FROM follows f JOIN users u ON u.id=f.a WHERE f.b=?', [u.id])).map(r => r.alias),
+      solicitudes_de_seguimiento_pendientes: (await all('SELECT u.alias alias FROM follow_requests r JOIN users u ON u.id=r.b WHERE r.a=?', [u.id])).map(r => r.alias),
       sesiones_abiertas: await all('SELECT created, exp, ua FROM tokens WHERE uid=? AND exp>?', [u.id, Date.now()]),
       registro_de_seguridad: await all('SELECT action, ip, ua, ts FROM audit_logs WHERE uid=? ORDER BY ts ASC', [u.id]) };
     await audit(u.id, 'DATA_EXPORT', req);
@@ -515,7 +545,7 @@ const routes = {
   'DELETE /api/me': async ({ req, res, u, b }) => {   // derecho de supresión (art. 17 RGPD): se borra todo, sin depender de ON DELETE CASCADE
     if (await limited('del:' + u.id, 10, HOUR)) return send(res, 429, { error: 'Demasiados intentos. Inténtalo más tarde.' });
     if (!(await checkPw(str(b.password, 200), u))) return send(res, 403, { error: 'Contraseña incorrecta.' });
-    await atomic([['DELETE FROM kudos WHERE uid=? OR day IN (SELECT id FROM days WHERE uid=?)', [u.id, u.id]], ['DELETE FROM follows WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM blocks WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM reports WHERE reporter=? OR target=?', [u.id, u.id]],
+    await atomic([['DELETE FROM kudos WHERE uid=? OR day IN (SELECT id FROM days WHERE uid=?)', [u.id, u.id]], ['DELETE FROM follows WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM follow_requests WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM notifs WHERE uid=? OR actor=?', [u.id, u.id]], ['DELETE FROM blocks WHERE a=? OR b=?', [u.id, u.id]], ['DELETE FROM reports WHERE reporter=? OR target=?', [u.id, u.id]],
       ['DELETE FROM passes WHERE uid=?', [u.id]], ['DELETE FROM days WHERE uid=?', [u.id]], ['DELETE FROM tokens WHERE uid=?', [u.id]], ['DELETE FROM resets WHERE uid=?', [u.id]], ['DELETE FROM verifs WHERE uid=?', [u.id]], ['DELETE FROM avatars WHERE uid=?', [u.id]],
       ['DELETE FROM audit_logs WHERE uid=?', [u.id]], ['DELETE FROM users WHERE id=?', [u.id]]]);
     fresh(); await audit(u.id, 'ACCOUNT_DELETION', req);   // solo queda constancia del borrado, sin datos personales
@@ -672,33 +702,100 @@ const routes = {
   'GET /api/users': async ({ res, u, q }) => {
     const s = str(q.get('q'), 40).trim().toLowerCase().replace(/^@/, '').replace(/[%_\\]/g, '');
     if (s.length < 2) return send(res, 200, []);
-    const rows = await all(`SELECT id, alias, avatar, handle, modality, level, EXISTS(SELECT 1 FROM follows WHERE a=? AND b=u.id) following FROM users u WHERE id!=? AND ${pubU()} AND ${notBlocked('u.id')} AND (lower(alias) LIKE ? OR handle LIKE ?) ORDER BY alias LIMIT 10`, [u.id, u.id, u.id, u.id, `%${s}%`, `${s}%`]);
-    send(res, 200, rows.map(x => ({ ...x, avatar: safeAvatar(x.avatar), following: !!x.following })));
+    const rows = await all(`SELECT x.id id, x.alias alias, x.avatar avatar, x.handle handle, x.level level, x.station_home home, x.approve approve, ${REL} FROM users x WHERE x.id!=? AND ${pubCond('x.')} AND ${notBlocked('x.id')} AND (lower(x.alias) LIKE ? OR x.handle LIKE ?) ORDER BY x.alias LIMIT 10`, [u.id, u.id, u.id, u.id, u.id, u.id, `%${s}%`, `${s}%`]);
+    send(res, 200, rows.map(r => ({ ...person(r), following: !!r.iFollow })));   // «following» se mantiene por compatibilidad
   },
+  // Sugerencias: quien te sigue y tú no, amigos de tus amigos y gente de tu estación de casa (sin bloqueos ni cuentas ocultas)
+  'GET /api/suggest': async ({ res, u }) => {
+    const [back, fof, home] = await Promise.all([
+      all('SELECT a id FROM follows WHERE b=? ORDER BY COALESCE(ts,0) DESC LIMIT 30', [u.id]),
+      all('SELECT f2.b id, COUNT(*) n FROM follows f1 JOIN follows f2 ON f2.a=f1.b WHERE f1.a=? AND f2.b!=? GROUP BY f2.b ORDER BY n DESC LIMIT 30', [u.id, u.id]),
+      u.station_home ? all('SELECT id FROM users WHERE station_home=? AND id!=? ORDER BY (SELECT COUNT(*) FROM days WHERE uid=users.id) DESC LIMIT 30', [u.station_home, u.id]) : []]);
+    const why = new Map(), add = (id, score, txt) => { const w = why.get(id) || { score: 0, txt: [] }; w.score += score; if (txt) w.txt.push(txt); why.set(id, w); };
+    back.forEach(r => add(r.id, 100, 'Te sigue'));
+    fof.forEach(r => add(r.id, 10 * r.n, `${r.n} ${r.n === 1 ? 'amigo' : 'amigos'} en común`));
+    home.forEach(r => add(r.id, 1, 'Esquía en tu estación'));
+    const ids = [...why.keys()]; if (!ids.length) return send(res, 200, []);
+    const rows = await all(`SELECT x.id id, x.alias alias, x.avatar avatar, x.handle handle, x.level level, x.station_home home, x.approve approve, ${REL} FROM users x WHERE x.id IN (${ids.map(() => '?').join(',')}) AND ${pubCond('x.')} AND ${notBlocked('x.id')}`, [u.id, u.id, u.id, ...ids, u.id, u.id]);
+    const asked = new Set((await all('SELECT a FROM follow_requests WHERE b=?', [u.id])).map(r => r.a));   // quien ya te ha pedido seguirte está en tus solicitudes
+    send(res, 200, rows.filter(r => !r.iFollow && !r.requested && !asked.has(r.id)).map(r => ({ ...person(r), why: why.get(r.id).txt.slice(0, 2).join(' · '), score: why.get(r.id).score })).sort((a, b) => b.score - a.score).slice(0, 12).map(({ score, ...p }) => p));
+  },
+  // Listas de seguidores y de seguidos. La propia, siempre; la de otra persona, si su cuenta es visible y, cuando aprueba a sus seguidores, solo a quien ya la sigue
+  'GET /api/connections': async ({ res, u, q }) => {
+    const id = str(q.get('id'), 40) || u.id, kind = q.get('kind') === 'following' ? 'following' : 'followers', mine = id === u.id;
+    const t = mine ? u : await one(`SELECT id, approve FROM users WHERE id=? AND ${pubCond('')}`, [id]);
+    if (!t || (!mine && await blockedEither(u.id, id))) return send(res, 404, { error: 'No existe.' });
+    if (!mine && t.approve && !(await one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, id]))) return send(res, 403, { error: 'Esta cuenta aprueba a sus seguidores. Síguela para ver con quién esquía.' });
+    const [who, owner] = kind === 'followers' ? ['a', 'b'] : ['b', 'a'];
+    const s = str(q.get('q'), 40).trim().toLowerCase().replace(/^@/, '').replace(/[%_\\]/g, ''), off = Math.max(0, Math.min(5000, parseInt(q.get('offset'), 10) || 0));
+    const from = `FROM follows f JOIN users x ON x.id=f.${who} WHERE f.${owner}=? AND ${pubCond('x.')} AND ${notBlocked('x.id')}${s ? ' AND (lower(x.alias) LIKE ? OR x.handle LIKE ?)' : ''}`, wa = [id, u.id, u.id, ...(s ? [`%${s}%`, `${s}%`] : [])];
+    const [rows, total] = await Promise.all([
+      all(`SELECT x.id id, x.alias alias, x.avatar avatar, x.handle handle, x.level level, x.station_home home, x.approve approve, f.ts ts, ${REL} ${from} ORDER BY COALESCE(f.ts,0) DESC, x.alias LIMIT 41 OFFSET ?`, [u.id, u.id, u.id, ...wa, off]),
+      count(`SELECT COUNT(*) n ${from}`, wa)]);
+    send(res, 200, { kind, mine, total, more: rows.length > 40, items: rows.slice(0, 40).map(r => ({ ...person(r), me: r.id === u.id })) });
+  },
+  'GET /api/requests': async ({ res, u }) => send(res, 200, (await all(`SELECT x.id id, x.alias alias, x.avatar avatar, x.handle handle, x.level level, x.station_home home, x.approve approve, r.ts ts, ${REL} FROM follow_requests r JOIN users x ON x.id=r.a WHERE r.b=? AND ${pubCond('x.')} AND ${notBlocked('x.id')} ORDER BY r.ts DESC LIMIT 100`, [u.id, u.id, u.id, u.id, u.id, u.id])).map(person)),
+  // Contestar solicitudes: una (id) o todas (all). Al aceptar, quien pidió empieza a seguirte y recibe un aviso; al rechazar no se le dice nada
+  'POST /api/requests': async ({ res, u, b }) => {
+    if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
+    const accept = b.accept === true, all_ = b.all === true, ids = all_ ? (await all('SELECT a FROM follow_requests WHERE b=? ORDER BY ts DESC LIMIT 200', [u.id])).map(r => r.a) : [str(b.id, 40)];
+    let n = 0;
+    for (const id of ids) {
+      if (!(await one('SELECT 1 x FROM follow_requests WHERE a=? AND b=?', [id, u.id]))) { if (all_) continue; return send(res, 404, { error: 'Esa solicitud ya no existe.' }); }
+      const ok = accept && !!(await one(`SELECT 1 x FROM users WHERE id=? AND ${pubCond('')}`, [id])) && !(await blockedEither(u.id, id));
+      if (ok) { await atomic([['INSERT OR IGNORE INTO follows(a,b,ts) VALUES(?,?,?)', [id, u.id, Date.now()]], ['DELETE FROM follow_requests WHERE a=? AND b=?', [id, u.id]]]); await notify(id, 'accepted', u.id); n++; }
+      else { await run('DELETE FROM follow_requests WHERE a=? AND b=?', [id, u.id]); if (accept && !all_) return send(res, 404, { error: 'Esa persona ya no está disponible.' }); if (!accept) n++; }
+    }
+    send(res, 200, { ok: true, n, ...(await socialOf(u.id)), followers: await count('SELECT COUNT(*) n FROM follows WHERE b=?', [u.id]) });
+  },
+  // Quitar a un seguidor sin bloquearlo (no se le avisa; puede volver a pedir seguirte)
+  'POST /api/followers/remove': async ({ res, u, b }) => {
+    if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
+    const id = str(b.id, 40), had = (await run('DELETE FROM follows WHERE a=? AND b=?', [id, u.id])).rowsAffected;
+    if (!had) return send(res, 404, { error: 'Esa persona no te sigue.' });
+    await unnotify(u.id, 'follow', id);
+    send(res, 200, { ok: true, followers: await count('SELECT COUNT(*) n FROM follows WHERE b=?', [u.id]) });
+  },
+  'GET /api/social': async ({ res, u }) => send(res, 200, await socialOf(u.id)),
+  'GET /api/activity': async ({ res, u }) => {
+    await run('DELETE FROM notifs WHERE uid=? AND ts<?', [u.id, Date.now() - 60 * DAY]);
+    const seen = u.notif_seen || 0;
+    const rows = await all(`SELECT n.id nid, n.kind kind, n.ts nts, n.day day, d.station station, x.id id, x.alias alias, x.avatar avatar, x.handle handle, x.level level, x.station_home home, x.approve approve, ${REL} FROM notifs n JOIN users x ON x.id=n.actor LEFT JOIN days d ON d.id=n.day WHERE n.uid=? AND ${pubCond('x.')} AND ${notBlocked('x.id')} ORDER BY n.ts DESC LIMIT 60`, [u.id, u.id, u.id, u.id, u.id, u.id]);
+    send(res, 200, { items: rows.map(r => ({ ...person({ ...r, ts: r.nts }), kind: r.kind, day: r.day || null, station: r.station || null, fresh: r.nts > seen })), ...(await socialOf(u.id)) });
+  },
+  'POST /api/activity/seen': async ({ res, u }) => { await run('UPDATE users SET notif_seen=? WHERE id=?', [Date.now(), u.id]); send(res, 200, { ok: true, ...(await socialOf(u.id)) }); },
   'POST /api/follow': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
     const id = str(b.id, 40);
-    const had = (await run('DELETE FROM follows WHERE a=? AND b=?', [u.id, id])).rowsAffected;   // dejar de seguir vale siempre
-    if (!had) {   // empezar a seguir, solo a cuentas públicas y sin bloqueos
-      if (id === u.id || !(await one(`SELECT 1 x FROM users WHERE id=? AND ${pubCond('')}`, [id])) || await blockedEither(u.id, id)) return send(res, 400, { error: 'Usuario no válido.' });
-      await run('INSERT OR IGNORE INTO follows(a,b) VALUES(?,?)', [u.id, id]);
-    }
-    send(res, 200, { following: !had });
+    // Dejar de seguir y cancelar una solicitud pendiente valen siempre; el mismo botón hace las tres cosas
+    if ((await run('DELETE FROM follows WHERE a=? AND b=?', [u.id, id])).rowsAffected) { await unnotify(id, 'follow', u.id); return send(res, 200, { following: false, requested: false }); }
+    if ((await run('DELETE FROM follow_requests WHERE a=? AND b=?', [u.id, id])).rowsAffected) return send(res, 200, { following: false, requested: false });
+    // Empezar a seguir: solo a cuentas visibles y sin bloqueos. Si la cuenta aprueba a sus seguidores, se queda como solicitud
+    const t = id !== u.id && await one(`SELECT approve FROM users WHERE id=? AND ${pubCond('')}`, [id]);
+    if (!t || await blockedEither(u.id, id)) return send(res, 400, { error: 'Usuario no válido.' });
+    if (await limited('fw:' + u.id, 60, HOUR)) return send(res, 429, { error: 'Has seguido a mucha gente en poco tiempo. Inténtalo dentro de un rato.' });
+    if (t.approve) { await run('INSERT OR IGNORE INTO follow_requests(a,b,ts) VALUES(?,?,?)', [u.id, id, Date.now()]); return send(res, 200, { following: false, requested: true }); }
+    await run('INSERT OR IGNORE INTO follows(a,b,ts) VALUES(?,?,?)', [u.id, id, Date.now()]);
+    await notify(id, 'follow', u.id);
+    send(res, 200, { following: true, requested: false });
   },
   'GET /api/user': async ({ res, u, q }) => {
-    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned, handle, since, terrain, wish, gear, club FROM users WHERE id=?', [str(q.get('id'), 40)]);
+    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned, handle, since, terrain, wish, gear, club, approve FROM users WHERE id=?', [str(q.get('id'), 40)]);
     if (!t || (t.id !== u.id && ((VERIFY && t.verified === 0) || t.hidden || t.banned || await blockedEither(u.id, t.id)))) return send(res, 404, { error: 'No existe.' });
     const me = t.id === u.id;
-    const [totals, stations, days, pos, stk, followers, following] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT id, station, ts, desnivel, bajadas, freeride, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
-      posOf(t.id, 'desnivel', null, 'temporada'), streak(t.id), count('SELECT COUNT(*) n FROM follows WHERE b=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, t.id])]);
-    delete t.verified; delete t.hidden; delete t.banned; send(res, 200, { ...t, ...card(t), age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, following: !!following, me });   // la edad es privada
+    const [totals, stations, days, pos, stk, followers, following, followingN, followsMe, requested] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT id, station, ts, desnivel, bajadas, freeride, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
+      posOf(t.id, 'desnivel', null, 'temporada'), streak(t.id), count('SELECT COUNT(*) n FROM follows WHERE b=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, t.id]),
+      count('SELECT COUNT(*) n FROM follows WHERE a=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [t.id, u.id]), one('SELECT 1 x FROM follow_requests WHERE a=? AND b=?', [u.id, t.id])]);
+    delete t.verified; delete t.hidden; delete t.banned;
+    send(res, 200, { ...t, ...card(t), age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, followingN, following: !!following, followsMe: !!followsMe, requested: !!requested, approve: !!t.approve, canList: me || !t.approve || !!following, me });   // la edad es privada
   },
   'POST /api/kudos': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
     // Solo días que se pueden ver: de cuentas públicas (ni ocultas ni suspendidas ni sin verificar) y sin bloqueos
     const id = str(b.id, 40), dd = await one(`SELECT d.uid uid FROM days d JOIN users u ON u.id=d.uid WHERE d.id=? AND ${pubU()}`, [id]); if (!dd || await blockedEither(u.id, dd.uid)) return send(res, 404, { error: 'No existe.' });
     if (dd.uid === u.id) return send(res, 400, { error: 'No puedes dar apoyo a tus propios días.' });
-    const had = (await run('DELETE FROM kudos WHERE day=? AND uid=?', [id, u.id])).rowsAffected; if (!had) await run('INSERT OR IGNORE INTO kudos(day,uid) VALUES(?,?)', [id, u.id]);
+    const had = (await run('DELETE FROM kudos WHERE day=? AND uid=?', [id, u.id])).rowsAffected;
+    if (!had) { await run('INSERT OR IGNORE INTO kudos(day,uid) VALUES(?,?)', [id, u.id]); await notify(dd.uid, 'kudo', u.id, id); } else await unnotify(dd.uid, 'kudo', u.id, id);
     send(res, 200, { kudos: await count('SELECT COUNT(*) n FROM kudos WHERE day=?', [id]), liked: !had });
   },
   // ---- bloquear y denunciar
@@ -706,7 +803,8 @@ const routes = {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
     const id = str(b.id, 40); if (id === u.id || !(await one('SELECT 1 x FROM users WHERE id=?', [id]))) return send(res, 400, { error: 'Usuario no válido.' });
     const had = (await run('DELETE FROM blocks WHERE a=? AND b=?', [u.id, id])).rowsAffected;
-    if (!had) await atomic([['INSERT OR IGNORE INTO blocks(a,b,ts) VALUES(?,?,?)', [u.id, id, Date.now()]], ['DELETE FROM follows WHERE (a=? AND b=?) OR (a=? AND b=?)', [u.id, id, id, u.id]]]);
+    if (!had) await atomic([['INSERT OR IGNORE INTO blocks(a,b,ts) VALUES(?,?,?)', [u.id, id, Date.now()]], ['DELETE FROM follows WHERE (a=? AND b=?) OR (a=? AND b=?)', [u.id, id, id, u.id]],
+      ['DELETE FROM follow_requests WHERE (a=? AND b=?) OR (a=? AND b=?)', [u.id, id, id, u.id]], ['DELETE FROM notifs WHERE (uid=? AND actor=?) OR (uid=? AND actor=?)', [u.id, id, id, u.id]]]);
     await audit(u.id, had ? 'UNBLOCK' : 'BLOCK', req); send(res, 200, { blocked: !had });
   },
   'GET /api/blocks': async ({ res, u }) => send(res, 200, await all('SELECT u.id id, u.alias alias FROM blocks k JOIN users u ON u.id=k.b WHERE k.a=? ORDER BY k.ts DESC', [u.id])),
@@ -823,7 +921,9 @@ async function handler(req, res) {
       if (MAPS_URL && !/^\/3d\/estaciones\/[a-z-]+\/data\/dem\.u16d$/.test(url.pathname)) { res.writeHead(302, { Location: MAPS_URL + url.pathname.slice(3) + url.search }); return res.end(); }   // enlaces antiguos
       return fs.existsSync(MAPS) ? serveFile(req, res, MAPS, url.pathname.slice(3)) : send(res, 404, { error: 'Mapas 3D no instalados (MAPS_DIR).' });
     }
-    if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#f3f7fb', theme_color: '#f3f7fb', description: 'Graba tus días de esquí, colecciona las pistas de cada estación y compite con la comunidad.', lang: 'es', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
+    if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#f3f7fb', theme_color: '#f3f7fb', description: 'Graba tus días de esquí, colecciona las pistas de cada estación y compite con la comunidad.', lang: 'es', id: '/', scope: '/', orientation: 'portrait', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' }] })); }
+    if (/^\/(icon-192|icon-512|apple-touch-icon)\.png$/.test(url.pathname)) return serveFile(req, res, path.join(__dirname, 'public'), url.pathname.slice(1));
+    if (url.pathname === '/sw.js') return serveFile(req, res, path.join(__dirname, 'public'), 'sw.js', 'no-cache');   // el navegador lo revisa siempre
     if (url.pathname === '/icon.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0f2a44"/><path d="M14 74l24-40 16 24 12-16 20 32z" fill="none" stroke="#ff5a1f" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>'); }
     // Panel de datos para administradores: la página no lleva datos (los pide a /api/admin/panel, que comprueba quién es)
     if (url.pathname === '/panel.js') return serveFile(req, res, path.join(__dirname, 'public'), 'panel.js', 'no-store');

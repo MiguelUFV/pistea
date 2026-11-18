@@ -5,7 +5,7 @@ import importlib, json, math, os, subprocess, sys
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-MOTOR = RAIZ.parent.parent / 'Estaciones3D' / 'scripts'
+MOTOR = RAIZ.parent / 'Estaciones3D' / 'scripts'
 
 def uno(est):
     os.environ['ESTACION'] = est; sys.path.insert(0, str(MOTOR))

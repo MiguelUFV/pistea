@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Pistea</title><meta name="description" content="Graba tus días de esquí, colecciona las pistas de cada estación y compite con la comunidad."><link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg"><meta name="theme-color" content="#f3f7fb">
+<title>Pistea</title><meta name="description" content="Graba tus días de esquí, colecciona las pistas de cada estación y compite con la comunidad."><link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Pistea"><meta name="theme-color" content="#f3f7fb">
 <link rel="preload" href="/fonts/Barlow-400.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/fonts/BarlowSemiCondensed-700.woff2" as="font" type="font/woff2" crossorigin>
 <style>
 /* Pistea · sistema visual «día de sol en pistas»: nieve, tinta de montaña, naranja de seguridad (la acción de grabar) y los
@@ -219,6 +219,22 @@ input+small,textarea+small,select+small,.hd+small{display:block;margin-top:6px}
 .idtx{min-width:0;padding-bottom:4px}.idtx h1{font-size:30px;overflow-wrap:anywhere}.handle{color:var(--mu);font-weight:500;margin-top:2px}
 .since{color:var(--mu);font-size:14.5px;margin-top:10px}
 .soc{display:flex;gap:20px;margin:14px 0 2px;font-size:14px;color:var(--mu)}.soc b{color:var(--tx);font:700 20px var(--cond);margin-right:5px}
+/* Parte social: campana y avisos, listas de personas, solicitudes y sugerencias */
+.soc{flex-wrap:wrap;row-gap:6px}.soc button{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left}.soc button:hover,.soc button:focus-visible{color:var(--tx);text-decoration:underline}
+.tw{display:flex;align-items:center;justify-content:space-between;gap:12px}.tw h1{margin:0}
+.bell{position:relative;flex:none;width:44px;height:44px;border-radius:50%;background:var(--s1);border:1px solid var(--ln);color:var(--tx);display:grid;place-items:center;cursor:pointer;box-shadow:0 1px 3px rgba(15,42,68,.1)}
+.bell .nb{position:absolute;top:-5px;right:-5px;min-width:20px;height:20px;padding:0 5px;border-radius:99px;background:var(--or);color:#fff;font:700 12px Barlow,sans-serif;display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg)}
+nav button{position:relative}nav .nd{position:absolute;top:4px;left:calc(50% + 7px);width:10px;height:10px;border-radius:50%;background:var(--or);box-shadow:0 0 0 2px var(--s1)}
+.prow{gap:12px}.prow .pn{flex:1;min-width:0;cursor:pointer;display:flex;flex-direction:column;gap:1px}.prow .pn b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.prow .pn small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mu)}
+.prow .pn .chipTag{font-size:11.5px;padding:2px 8px;margin-left:4px;vertical-align:1px}.pact{display:flex;gap:6px;align-items:center;flex:none}.pact .kudo{white-space:nowrap}.kudo.ic{padding:7px 9px}
+.prow.fresh{background:rgba(255,90,31,.08);border-radius:12px;margin:0 -8px;padding-left:8px;padding-right:8px}
+h2 #rqn{display:inline-grid;place-items:center;min-width:24px;height:24px;border-radius:99px;background:var(--or);color:#fff;font:700 14px Barlow,sans-serif;margin-left:6px;vertical-align:2px;padding:0 6px}
+.reqb{display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;color:var(--tx);font:inherit;margin:0 0 14px;border-color:var(--or)}.reqb svg{color:var(--or);flex:none}.reqb div{flex:1}.reqb small{display:block;color:var(--mu)}.reqb>span{font-weight:600;color:var(--or)}
+.sug{display:flex;gap:10px;overflow-x:auto;margin:0 -18px 6px;padding:2px 18px 10px;scrollbar-width:none}.sug::-webkit-scrollbar{display:none}
+.sug>div{flex:none;width:142px;background:var(--s1);border:1px solid var(--ln);border-radius:var(--r2);padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center}
+.sug .av{width:54px;height:54px;font-size:19px}.sug b{font-weight:600;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.sug small{color:var(--mu);font-size:12.5px;line-height:1.25;min-height:2.5em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.sug .kudo{margin-top:4px;justify-content:center;min-width:96px}
+.x.bk{float:right;margin-right:10px;font-size:26px;line-height:1;padding-bottom:3px}
+.fw{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 8px}.fnote{display:block;color:var(--mu);margin-top:8px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0}
 .bio{font-size:15.5px;margin:0 0 14px}
 .facts{border:1px solid var(--ln);border-radius:var(--r2);background:var(--s1);margin:0 0 14px}

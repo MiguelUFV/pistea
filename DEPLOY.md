@@ -35,7 +35,7 @@ docker compose up -d --build
 
 ## 4. El motor del día (traquear)
 - `public/calc.js` es el mismo en la app (cifras en directo) y en el servidor, que recalcula cada día desde la traza GPS: remontes, cada bajada con sus pistas, freeride, desnivel con el relieve del mapa 3D. Está explicado al principio del fichero.
-- Datos de cada estación: `node scripts/gen_seguimiento.js` escribe `public/seg/<id>.json` (pistas, remontes, proyección) y el recuadro de cada miniatura en `public/img/estaciones.json`. Necesita `../../Estaciones3D/scripts/estaciones`. Vuelve a lanzarlo si cambian los mapas o se rehacen las miniaturas. El relieve se lee de `mapas/estaciones/<id>/data/dem.u16d`: sin él, el servidor usa la altitud del GPS, peor.
+- Datos de cada estación: `node scripts/gen_seguimiento.js` escribe `public/seg/<id>.json` (pistas, remontes, proyección) y el recuadro de cada miniatura en `public/img/estaciones.json`. Necesita `../Estaciones3D/scripts/estaciones`. Vuelve a lanzarlo si cambian los mapas o se rehacen las miniaturas. El relieve se lee de `mapas/estaciones/<id>/data/dem.u16d`: sin él, el servidor usa la altitud del GPS, peor.
 - Banco de pruebas: `node scripts/banco_seguimiento.js 12` (días sintéticos con la verdad conocida, con freeride, un remonte que no está en el mapa y vuelta en coche). Pásalo antes y después de tocar el motor: a ojo se empeora fácil.
 - Las pistas de la ficha de cada estación: `node scripts/gen_pistas.js`.
 

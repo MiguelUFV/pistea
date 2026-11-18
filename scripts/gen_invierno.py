@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-MOTOR = RAIZ.parent.parent / 'Estaciones3D' / 'scripts'          # ficha de cada estación (huso y origen local)
+MOTOR = RAIZ.parent / 'Estaciones3D' / 'scripts'          # ficha de cada estación (huso y origen local)
 PC = 'https://planetarycomputer.microsoft.com/api'
 PERIODO = '2025-11-15/2026-04-20'
 

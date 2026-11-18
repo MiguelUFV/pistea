@@ -29,7 +29,7 @@ const PAGES = {
 <tr><td>Días de esquí: estación, fecha, cifras del día y un recorrido simplificado sin coordenadas geográficas</td><td>Tu historial, los rankings y la comunidad</td><td>Ejecución del contrato (art. 6.1.b)</td></tr>
 <tr><td>Pistas que has bajado en cada día (calculadas desde la grabación): cuántas veces, metros y velocidad máxima en cada una</td><td>Tu pasaporte de pistas, los récords por pista y tu resumen de temporada</td><td>Ejecución del contrato (art. 6.1.b)</td></tr>
 <tr><td>Traza GPS completa del día</td><td>Comprobar en el servidor que el día es real (antitrampas). Se usa para recalcular las cifras y <b>no se guarda</b></td><td>Interés legítimo en un ranking justo (art. 6.1.f)</td></tr>
-<tr><td>Seguidores, apoyos, bloqueos y denuncias</td><td>Funciones sociales y moderación</td><td>Ejecución del contrato (art. 6.1.b) e interés legítimo en una comunidad segura (art. 6.1.f)</td></tr>
+<tr><td>Seguidores, solicitudes de seguimiento, avisos de actividad, apoyos, bloqueos y denuncias</td><td>Funciones sociales y moderación</td><td>Ejecución del contrato (art. 6.1.b) e interés legítimo en una comunidad segura (art. 6.1.f)</td></tr>
 <tr><td>Registro de seguridad: fecha, dirección IP y tipo de dispositivo de los accesos y cambios en tu cuenta</td><td>Detectar accesos indebidos y frenar ataques</td><td>Interés legítimo en la seguridad (art. 6.1.f)</td></tr></table>
 <p>No vendemos tus datos, no hay publicidad y no hacemos perfiles comerciales.</p>
 

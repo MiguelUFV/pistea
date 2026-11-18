@@ -4,11 +4,11 @@
 //   dem  cómo leer su relieve, que se pide aparte al mapa 3D (mapas/estaciones/<id>/data/dem.u16d)
 //   p    pistas: [nombre, color (v, a, r, n o f, itinerario: los oficiales y el freeride de OSM), anchura (0: sin dato), [x, z, x, z…]]
 //   l    remontes: [nombre, tipo, velocidad (m/s), [x, z…] de abajo arriba]
-// Uso: node scripts/gen_seguimiento.js (necesita ../../Estaciones3D/scripts/estaciones). Volver a ejecutarlo si cambian
+// Uso: node scripts/gen_seguimiento.js (necesita ../Estaciones3D/scripts/estaciones). Volver a ejecutarlo si cambian
 // los mapas o si se rehacen las miniaturas (gen_miniaturas.py reescribe estaciones.json).
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { heights, relief, toLocal } = require('../public/calc.js');
-const R = path.join(__dirname, '..'), E = path.join(R, 'mapas', 'estaciones'), OUT = path.join(R, 'public', 'seg'), FICHAS = path.join(R, '..', '..', 'Estaciones3D', 'scripts', 'estaciones');
+const R = path.join(__dirname, '..'), E = path.join(R, 'mapas', 'estaciones'), OUT = path.join(R, 'public', 'seg'), FICHAS = path.join(R, '..', 'Estaciones3D', 'scripts', 'estaciones');
 const SI = path.join(R, 'public', 'img', 'estaciones.json'), GEO = require('../estaciones_geo.json');
 const COL = { novice: 'v', easy: 'a', intermediate: 'r', advanced: 'n', expert: 'n', extreme: 'n', freeride: 'f' };
 const SPEED = { chair_lift: 2.3, gondola: 5, cable_car: 8, mixed_lift: 5, drag_lift: 3, 't-bar': 3, 'j-bar': 3, platter: 3, rope_tow: 2, magic_carpet: 0.8 };
