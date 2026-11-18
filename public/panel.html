@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Pistea · Panel de datos</title>
+<link rel="icon" href="/icon.svg">
+<style>
+@font-face{font-family:Barlow;src:url(/fonts/Barlow-400.woff2) format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:Barlow;src:url(/fonts/Barlow-500.woff2) format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:Barlow;src:url(/fonts/Barlow-600.woff2) format('woff2');font-weight:600 700;font-display:swap}
+@font-face{font-family:Cond;src:url(/fonts/BarlowSemiCondensed-600.woff2) format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:Cond;src:url(/fonts/BarlowSemiCondensed-700.woff2) format('woff2');font-weight:700;font-display:swap}
+:root{--bg:#f3f7fb;--s1:#fff;--s2:#e9f0f7;--ln:#d8e3ee;--tx:#0f2a44;--mu:#587089;--ac:#1f6fe0;--or:#ff5a1f;--g:#1e9e4a;--b:#1f6fe0;--r:#dc2f2f;--k:#1b2330;--fr:#e8a200}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 Barlow,system-ui,sans-serif}
+.wrap{max-width:1320px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:18px}
+h1{font:700 28px/1 Cond,Barlow,sans-serif;margin:0;letter-spacing:.2px}
+h1 small{display:block;font:500 13px Barlow;color:var(--mu);margin-top:6px;letter-spacing:0}
+h2{font:700 18px Cond,Barlow,sans-serif;margin:0 0 12px}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input{font:inherit;color:inherit}
+.btn{border:1px solid var(--ln);background:var(--s1);border-radius:10px;padding:8px 14px;font-weight:600;cursor:pointer}
+.btn:hover{border-color:var(--ac)}
+.btn.pri{background:var(--tx);border-color:var(--tx);color:#fff}
+.seg{display:inline-flex;background:var(--s2);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:6px 12px;border-radius:8px;font-weight:600;color:var(--mu);cursor:pointer}
+.seg button.on{background:var(--s1);color:var(--tx);box-shadow:0 1px 3px #0f2a4422}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--s1);border:1px solid var(--ln);border-radius:14px;padding:14px 16px}
+.kpi b{display:block;font:700 30px/1.05 Cond,Barlow,sans-serif}
+.kpi span{color:var(--mu);font-size:13px}
+.kpi em{font-style:normal;font-size:12px;font-weight:600;margin-left:6px}
+.up{color:var(--g)}.down{color:var(--r)}
+.card{background:var(--s1);border:1px solid var(--ln);border-radius:14px;padding:16px;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:14px;margin-bottom:14px}
+.wide{grid-column:1/-1}
+.report{margin:0;padding-left:20px}
+.report li{margin:4px 0}
+.report li.warn::marker{color:var(--or)}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{font:12px Barlow,sans-serif;fill:var(--mu)}
+svg .v{fill:var(--tx);font-weight:600}
+.empty{color:var(--mu);padding:20px 0;text-align:center}
+.tbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.tbar input{flex:1 1 220px;border:1px solid var(--ln);border-radius:10px;padding:8px 12px;background:var(--s1)}
+.tbar select{border:1px solid var(--ln);border-radius:10px;padding:8px 10px;background:var(--s1)}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--ln);white-space:nowrap}
+th{font-weight:600;color:var(--mu);cursor:pointer;user-select:none;position:sticky;top:0;background:var(--s1)}
+th.on{color:var(--tx)}
+td.num,th.num{text-align:right}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--s2)}
+.tag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:1px 6px;margin-left:4px;background:var(--s2);color:var(--mu)}
+.tag.ok{background:#1e9e4a1f;color:var(--g)}.tag.no{background:#ff5a1f1f;color:#c2410c}.tag.bad{background:#dc2f2f1f;color:var(--r)}
+.more{display:block;margin:12px auto 0}
+.msg{max-width:520px;margin:80px auto;text-align:center}
+.msg a{color:var(--ac);font-weight:600}
+dialog{border:0;border-radius:16px;padding:0;max-width:720px;width:calc(100% - 32px);color:var(--tx)}
+dialog::backdrop{background:#0f2a4466}
+.dlg{padding:20px}
+.dlg h2{font-size:22px;margin-bottom:4px}
+.dlg .sub{color:var(--mu);margin-bottom:14px}
+.dl{display:grid;grid-template-columns:170px 1fr;gap:6px 14px;margin:0 0 16px}
+.dl dt{color:var(--mu)}.dl dd{margin:0;word-break:break-word}
+.x{float:right}
+.note{color:var(--mu);font-size:13px;margin-top:22px}
+@media(max-width:600px){.kpis{grid-template-columns:1fr 1fr;gap:8px}.kpi{padding:12px}.kpi b{font-size:25px}.dl{grid-template-columns:1fr}.dl dt{margin-top:6px}h1{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><p class="msg">Cargando los datos…</p></div>
+<dialog id="dlg"></dialog>
+<script src="/panel.js"></script>
+</body>
+</html>

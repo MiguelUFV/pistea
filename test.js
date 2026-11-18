@@ -146,6 +146,16 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('quitar el día denunciado', (await M('POST', '/api/admin/resolve', { id: dayRep.id, action: 'quitar_dia' }))[0] === 200 && !(await Bx('GET', '/api/me'))[1].days.some(d => d.id === beaDay));
   t('descartar: vuelve a ser visible', (await M('POST', '/api/admin/resolve', { id: other1.id, action: 'descartar' }))[0] === 200 && (await A('GET', '/api/users?q=bea'))[1].length === 1);
   t('no quedan denuncias abiertas', (await M('GET', '/api/admin/reports'))[1].length === 0);
+  // --- panel de datos (/panel): todas las cuentas, solo para administradores y sin contraseñas
+  t('panel de datos: no para cualquiera', (await A('GET', '/api/admin/panel'))[0] === 403 && (await browser()('GET', '/api/admin/panel'))[0] === 401);
+  [s, j] = await M('GET', '/api/admin/panel');
+  const pj = JSON.stringify(j);
+  t('el administrador ve todas las cuentas con su correo', s === 200 && j.users.length >= 4 && j.users.some(x => x.email === 'admin@pistea.es') && j.users.every(x => x.email && x.created), pj.slice(0, 200));
+  t('…y los días, sin contraseñas, sesiones ni trazas', Array.isArray(j.days) && !/"(hash|salt|th|track|speed|detail|kexp)"/.test(pj) && j.users.every(x => !('avatar' in x)));
+  t('…con su última actividad', j.users.find(x => x.email === 'admin@pistea.es').seen > 0);
+  const pg = await fetch(B + '/panel'), ph = await pg.text();
+  t('la página del panel existe y no se indexa', pg.status === 200 && ph.includes('/panel.js') && /noindex/.test(pg.headers.get('x-robots-tag') || '') && /no-store/.test(pg.headers.get('cache-control') || ''));
+  t('el panel queda en la auditoría', (await M('GET', '/api/me/export'))[1].registro_de_seguridad.some(x => x.action === 'ADMIN_PANEL'));
   await R1('POST', '/api/report', { target: beaId, reason: 'spam' });
   const rep2 = (await M('GET', '/api/admin/reports'))[1][0];
   t('suspender', (await M('POST', '/api/admin/resolve', { id: rep2.id, action: 'suspender' }))[0] === 200);

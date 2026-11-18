@@ -13,7 +13,8 @@ Auditoría del 16-nov-2026 de todo `pistea/` (servidor, página, app de Android,
 3. **Sesión**: cookie `HttpOnly`, `Secure` y `SameSite=Lax` (`__Host-pistea`). JavaScript no puede leerla. Dura 90 días desde el último uso y se renueva sola. Toda escritura exige la cabecera `X-Pistea`, que protege contra CSRF.
 4. **La próxima vez** entras sin escribir nada. Si cierras sesión, el correo queda recordado. Sin internet, la app dice «Sin conexión» y no te saca.
 5. **Recuperar la contraseña**: enlace de un solo uso que caduca en 1 hora. Al usarlo se cierran todas las sesiones.
-6. **En Perfil**: cambiar contraseña (cierra los demás dispositivos), cerrar sesión en todos, usuarios bloqueados, descargar tus datos y borrar la cuenta.
+6. **Panel de datos** (`/panel`): solo lo abren las cuentas de `ADMIN_EMAILS` con el correo verificado. Enseña correo, ficha y días de todas las cuentas, pero nunca contraseñas, sesiones ni trazas GPS. Cada apertura queda en la auditoría. Los CSV que descarga son datos personales: guardarlos en local y borrarlos cuando ya no hagan falta.
+7. **En Perfil**: cambiar contraseña (cierra los demás dispositivos), cerrar sesión en todos, usuarios bloqueados, descargar tus datos y borrar la cuenta.
 
 ## Lo corregido
 | # | Gravedad | Problema | Arreglo |

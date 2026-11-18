@@ -12,7 +12,7 @@
   - Base de datos: `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`. Ya están.
   - Correo: `BREVO_API_KEY` y `MAIL_FROM`.
   - Páginas legales: `LEGAL_NAME` y `LEGAL_EMAIL`.
-  - Moderadores: `ADMIN_EMAILS`.
+  - Moderadores y panel de datos: `ADMIN_EMAILS` (correos separados por comas). Esas cuentas, con el correo verificado, moderan las denuncias y abren https://pistea.vercel.app/panel: todas las cuentas con sus datos, gráficas, informe y descarga para Excel.
   - Opcional: `APP_URL`, si usas un dominio propio.
   - Tras cambiar una variable hay que publicar de nuevo (Deployments → ⋯ → Redeploy).
 - **Mapas 3D: en Cloudflare Pages** (proyecto `pistea-mapas`, https://pistea-mapas.pages.dev), gratis y sin límite de tráfico; cada vista del 3D descarga entre 40 y 75 MB. A Vercel solo sube su relieve (`dem.u16d`, para el motor del día; ver `.vercelignore`): con los mapas dentro de la función, el 16-nov-2026 el «Functions Storage» llegó a unos 18 GB (el plan gratuito da 10). `/3d/…` redirige allí, salvo el relieve. Tras recompilar los mapas, **desde una carpeta fuera de Pistea**: `npx wrangler pages deploy <ruta>/pistea/mapas --project-name pistea-mapas --branch main` (la primera vez, `npx wrangler login`). Dentro de la carpeta, wrangler 4 «autoconfigura» Pistea como un Worker: cambia `package.json` y `.gitignore` y crea `wrangler.jsonc`. Para otra dirección, la variable `MAPS_URL`.
@@ -40,7 +40,7 @@ docker compose up -d --build
 - Las pistas de la ficha de cada estación: `node scripts/gen_pistas.js`.
 
 ## Antes de abrirlo al público
-Ver la lista de `SEGURIDAD.md` («Antes de publicar»). Pruebas: `npm test` (167 comprobaciones el 18-nov-2026; levanta el servidor con una BD temporal y lo reinicia para comprobar que nada se pierde).
+Ver la lista de `SEGURIDAD.md` («Antes de publicar»). Pruebas: `npm test` (173 comprobaciones el 18-nov-2026; levanta el servidor con una BD temporal y lo reinicia para comprobar que nada se pierde).
 
 ## App de Android (`app/`)
 La app es un envoltorio de Capacitor que carga Pistea desde tu servidor y añade el **grabador GPS nativo** (el mismo de «Mi día»): una posición por segundo, apuntada en un fichero del teléfono, con un servicio en primer plano. Sigue grabando con la pantalla apagada o la app cerrada, y el día se recupera desde el aviso de la portada.

@@ -744,6 +744,23 @@ const routes = {
     else return send(res, 400, { error: 'Acción no válida.' });
     fresh(); await audit(u.id, 'MODERATION', req, { action, target: r.target }); send(res, 200, { ok: true });
   },
+  // Panel de datos (/panel), solo ADMIN_EMAILS: todas las cuentas con su ficha y los días grabados, sin contraseñas ni
+  // trazas. Cada consulta queda en la auditoría (quién vio los datos personales y cuándo). La última actividad sale de la
+  // sesión deslizante: su caducidad se renueva, como mucho una vez al día, a 90 días desde el último uso
+  'GET /api/admin/panel': async ({ req, res, u }) => {
+    if (!isAdmin(u)) return send(res, 403, { error: 'Solo para administradores.' });
+    const [users, days, open] = await Promise.all([
+      all(`SELECT u.id id, u.email email, u.alias alias, u.handle handle, u.created created, u.verified verified, u.onboarded onboarded, u.age age, u.station_home home,
+        u.modality modality, u.level level, u.since since, u.club club, u.gear gear, u.terrain terrain, u.wish wish, u.goal_days goal, u.bio bio, u.hidden hidden, u.banned banned, u.demo demo,
+        u.terms_accepted_at terms, CASE WHEN EXISTS(SELECT 1 FROM avatars a WHERE a.uid=u.id) OR u.avatar IS NOT NULL THEN 1 ELSE 0 END foto,
+        (SELECT MAX(exp) FROM tokens k WHERE k.uid=u.id) kexp, (SELECT ua FROM tokens k WHERE k.uid=u.id ORDER BY exp DESC LIMIT 1) ua,
+        (SELECT COUNT(*) FROM follows f WHERE f.b=u.id) followers, (SELECT COUNT(*) FROM follows f WHERE f.a=u.id) following FROM users u ORDER BY u.created DESC`),
+      all('SELECT uid, station, ts, desnivel, km, bajadas, vmax, freeride, src FROM days ORDER BY ts'),
+      count("SELECT COUNT(*) n FROM reports WHERE status='open'")]);
+    const out = users.map(x => ({ ...x, terrain: J(x.terrain, []), wish: J(x.wish, []), seen: x.kexp ? Math.max(x.created || 0, x.kexp - SESSION) : null, verified: x.verified === null ? 1 : x.verified, kexp: undefined }));
+    await audit(u.id, 'ADMIN_PANEL', req, { users: out.length });
+    send(res, 200, { now: Date.now(), users: out, days: days.map(d => [d.uid, d.station, d.ts, d.desnivel, d.km, d.bajadas, d.vmax, d.freeride, d.src]), reports: open, stations: Object.fromEntries(STATIONS.map(s => [s[0], s[1]])) });
+  },
   'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/' })
 };
 
@@ -808,6 +825,9 @@ async function handler(req, res) {
     }
     if (url.pathname === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(JSON.stringify({ name: 'Pistea', short_name: 'Pistea', start_url: '/', display: 'standalone', background_color: '#f3f7fb', theme_color: '#f3f7fb', description: 'Graba tus días de esquí, colecciona las pistas de cada estación y compite con la comunidad.', lang: 'es', icons: [{ src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }] })); }
     if (url.pathname === '/icon.svg') { res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' }); return res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#0f2a44"/><path d="M14 74l24-40 16 24 12-16 20 32z" fill="none" stroke="#ff5a1f" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>'); }
+    // Panel de datos para administradores: la página no lleva datos (los pide a /api/admin/panel, que comprueba quién es)
+    if (url.pathname === '/panel.js') return serveFile(req, res, path.join(__dirname, 'public'), 'panel.js', 'no-store');
+    if (/^\/panel\/?$/.test(url.pathname)) { res.writeHead(200, { ...PAGE_HEADERS, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'X-Frame-Options': 'DENY' }); return res.end(fs.readFileSync(path.join(__dirname, 'public', 'panel.html'))); }
     const lp = /^\/(privacidad|condiciones|normas|borrar-cuenta)\/?$/.exec(url.pathname);
     if (lp) { res.writeHead(200, LEGAL_HEADERS); return res.end(legal(lp[1], env)); }
     if (url.pathname === '/healthz') { if (DB_ERR) return send(res, 503, { ok: false }); await dbReady(); await run('SELECT 1'); return send(res, 200, { ok: true }); }
