@@ -14,7 +14,7 @@ const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 const ago = ts => { if (!ts) return '—'; const d = Math.floor((Date.now() - ts) / DAY); return d <= 0 ? 'hoy' : d === 1 ? 'ayer' : `hace ${d} días`; };
 const LVL = { debutante: 'Debutante', intermedio: 'Intermedio', avanzado: 'Avanzado', experto: 'Experto' };
 const MOD = { ski: 'Esquí', snowboard: 'Snowboard', ambos: 'Esquí y snowboard' };
-const TER = { pista: 'Pistas pisadas', carving: 'Carving', baches: 'Baches', park: 'Snowpark', freeride: 'Fuera de pista', travesia: 'Travesía' };
+const TER = { pista: 'Pistas pisadas', carving: 'Carving', baches: 'Baches', park: 'Snowpark', freeride: 'Fuera de pista', travesia: 'Travesía', competicion: 'Trazado de competición' };
 const WD = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 const device = ua => !ua ? '—' : /; wv\)/.test(ua) ? 'App Android' : /iPhone|iPad/.test(ua) ? 'iPhone o iPad' : /Android|Mobile/.test(ua) ? 'Móvil (web)' : 'Ordenador';
 const madrid = ts => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, weekday: 'short', hour: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(ts)); return { wd: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(p.find(x => x.type === 'weekday').value), h: +p.find(x => x.type === 'hour').value }; };

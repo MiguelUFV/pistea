@@ -33,7 +33,7 @@ const season=()=>{const d=new Date(),y=d.getFullYear()-(d.getMonth()<6?1:0);retu
 const LVL={debutante:['Debutante','g'],intermedio:['Intermedio','b'],avanzado:['Avanzado','r'],experto:['Experto','k']};
 const LVLD={debutante:'Bajo pistas verdes y voy cogiendo confianza.',intermedio:'Bajo azules con soltura y alguna roja.',avanzado:'Rojas a buen ritmo y negras con cuidado.',experto:'Negras, fuera de pista y lo que haga falta.'};
 const MOD={ski:'Esquí',snowboard:'Snowboard',ambos:'Esquí y snowboard'};
-const TER={pista:'Pistas pisadas',carving:'Carving',baches:'Baches',park:'Snowpark',freeride:'Fuera de pista',travesia:'Travesía'};
+const TER={pista:'Pistas pisadas',carving:'Carving',baches:'Baches',park:'Snowpark',freeride:'Fuera de pista',travesia:'Travesía',competicion:'Trazado de competición'};
 const chips=u=>`<div class="chips">${u.age?`<span class="chipTag on">${u.age} años</span>`:''}<span class="chipTag on"><i style="background:var(--${(LVL[u.level]||LVL.intermedio)[1]})"></i>${(LVL[u.level]||LVL.intermedio)[0]}</span><span class="chipTag on">${MOD[u.modality]||MOD.ski}</span>${(u.terrain||[]).map(k=>TER[k]?`<span class="chipTag">${TER[k]}</span>`:'').join('')}</div>`;
 // El recorrido. Los días del motor nuevo traen [x, z, clase] en metros del mapa 3D: se dibujan encima de la miniatura de la
 // estación, que cubre la caja de estaciones.json, cada tramo con el color de su pista (el freeride en ámbar, las subidas a

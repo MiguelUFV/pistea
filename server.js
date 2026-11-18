@@ -285,7 +285,7 @@ const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvat
 const card = u => ({ handle: u.handle || null, since: u.since || null, terrain: J(u.terrain), wish: J(u.wish), gear: u.gear || '', club: u.club || '' });
 // @usuario: 3 a 20 letras minúsculas, cifras, punto o guion bajo, empezando y acabando en letra o cifra. Los nombres de la
 // app y de las estaciones quedan reservados para que nadie se haga pasar por ellas
-const TERRAIN = ['pista', 'carving', 'baches', 'park', 'freeride', 'travesia'];
+const TERRAIN = ['pista', 'carving', 'baches', 'park', 'freeride', 'travesia', 'competicion'];
 const RESERVED = new Set(['admin', 'administrador', 'pistea', 'soporte', 'ayuda', 'moderacion', 'moderador', 'oficial', 'staff', 'root', 'api', 'null', 'undefined', 'estacion', 'estaciones']);
 const reservedHandle = h => RESERVED.has(h) || [...SID].some(id => id.replace(/-/g, '') === h.replace(/[._]/g, '') || id.replace(/-/g, '.') === h || id.replace(/-/g, '_') === h);
 function badHandle(h) {
