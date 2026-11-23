@@ -68,6 +68,12 @@ App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (ver
 | Interacciones con la app (seguir, apoyos, bloqueos) | Opcional | Funcionalidad de la app |
 | ID del dispositivo u otros (IP y tipo de dispositivo del registro de seguridad) | Obligatorio | Prevención de fraude, seguridad y cumplimiento |
 
+## APK fuera de la tienda (enlace `/android`)
+- Versión vigente: **1.2.0 (versionCode 3)**, del 23-nov-2026. Está en Google Drive y `/android` lleva a ella (`APK.url` en `server.js`).
+- Huella SHA-256 de esa APK: `84f7a5dd3f7dec032fa44222e8ccfbd71e3e48e464862ad70fb9a8c91c42fcf0`. Sirve para comprobar que nadie la ha cambiado en Drive.
+- Las APK anteriores (versiones 1 y 2) siguen públicas en Drive: bórralas cuando quieras.
+- `APK_MIN` sigue en 2: quien tenga la 2 no ve el aviso. Súbelo a 3 si quieres que todos se actualicen.
+
 ## 4. Publicar una versión
 1. Sube `versionCode` en `app/android/app/build.gradle` (+1 cada vez) y `versionName`.
 2. `cd app` · `PISTEA_CANAL=play PISTEA_URL=https://pistea.vercel.app node sync.js` · `cd android` · `gradlew bundleRelease`. **`PISTEA_CANAL=play` es obligatorio**: así la app no enseña el aviso «Hay una versión nueva» (descarga una APK fuera de Play), que Google prohíbe. La APK que se reparte por el enlace `/android` se hace sin esa variable.

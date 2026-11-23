@@ -12,7 +12,7 @@
   "backgroundColor": "#0b0c0f",
   "android": {
     "useLegacyBridge": true,
-    "appendUserAgent": "PisteaApp/2"
+    "appendUserAgent": "PisteaApp/3"
   },
   "plugins": {
     "SystemBars": {

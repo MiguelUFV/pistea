@@ -45,6 +45,21 @@ public class GrabadorPlugin extends Plugin implements GrabadorService.Listener {
     @Override
     public void load() {
         GrabadorService.listener = this;
+        limpiarViejas();
+    }
+
+    // Una grabación que no se llega a guardar no se queda para siempre en el móvil: a los 30 días se borra (la que está
+    // grabando ahora, nunca)
+    private void limpiarViejas() {
+        File[] fs = GrabadorService.dir(getContext()).listFiles();
+        if (fs == null) return;
+        long now = System.currentTimeMillis(), cur = prefs().getLong("id", 0);
+        for (File f : fs) {
+            if (!f.getName().endsWith(".csv") || now - f.lastModified() < 30L * 24 * 3600 * 1000) continue;
+            boolean actual = f.getName().equals(cur + ".csv");
+            if (actual && GrabadorService.running) continue;
+            if (f.delete() && actual) prefs().edit().clear().apply();
+        }
     }
 
     @Override
