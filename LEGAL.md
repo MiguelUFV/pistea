@@ -14,7 +14,7 @@ Todo lo que se podía resolver con código, textos y documentos está hecho y pu
 | # | Punto | Estado |
 |---|---|---|
 | L1 | Días públicos con recorrido y horas | **Hecho.** «Quién ve tus días» (seguidores por defecto); sin horas para los demás; recorrido recortado; menores de 18 sin «Todos» |
-| L2 | Premiar la velocidad | **Hecho.** Sin ranking, coronas ni insignia de velocidad; la máxima, solo personal. Falta rehacer el vídeo del día (apartado 9) |
+| L2 | Premiar la velocidad | **Hecho.** Sin ranking, coronas ni insignia de velocidad; la máxima, solo personal. Vídeo del día y capturas de Google Play rehechos el 23-nov-2026, sin velocidad como logro y con créditos de fotos y mapas |
 | L3 | Aviso de APK fuera de Google Play | **Hecho.** La versión de Play (`PISTEA_CANAL=play`) no lo enseña |
 | L4 | Reglamento de Servicios Digitales | **Hecho.** Correo con medida, motivo y reclamación al afectado y la decisión a quien denunció; denunciar sin cuenta; moderación en las condiciones; punto de contacto |
 | L5 | Logotipos de las estaciones | **Hecho.** El 3D publicado ya no lleva logotipos, iconos, tipografías (Mont y Brandon, que son de pago) ni fotos oficiales |
