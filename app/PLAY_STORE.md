@@ -3,7 +3,7 @@
 Material listo en `app/store/`:
 - `icono_512.png`: icono de la ficha.
 - `cabecera_1024x500.png`: gráfico destacado.
-- `capturas/1_estaciones.png` … `4_estacion.png`: capturas del teléfono, 1080 × 1920.
+- `capturas/1_estaciones.png` … `6_perfil.png`: capturas del teléfono, 1080 × 1920, hechas el 23-nov-2026 con la app actual y datos de ejemplo (sin rankings de velocidad ni logotipos de estaciones).
 
 App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (versión 1.0.0, versionCode 1, carga https://pistea.vercel.app).
 
@@ -28,7 +28,7 @@ App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (ver
 > • Graba tu día con el GPS del móvil, aunque lo lleves bloqueado en el bolsillo: bajadas, desnivel, kilómetros, velocidad máxima y tiempo esquiando.
 > • 27 estaciones de España con su mapa 3D: Baqueira, Sierra Nevada, Formigal, Valdesquí, Cerler, La Molina y muchas más.
 > • Rankings de España y de cada estación por desnivel, kilómetros, horas o días. Liga semanal y rachas.
-> • Comunidad: sigue a tus amigos, da apoyos a sus días y compara temporadas.
+> • Comunidad: sigue a tus amigos, da apoyos a sus días y compara temporadas. Tú decides quién ve tus días: tus seguidores, todos o solo tú.
 > • Juego limpio: cada día se comprueba con la traza GPS real. Sin simuladores ni días inflados.
 > • Tus datos son tuyos: descárgalos o borra la cuenta cuando quieras.
 >
@@ -48,6 +48,8 @@ App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (ver
 | Borrado de cuenta | En la app (Perfil → Eliminar cuenta y datos) y en la web: https://pistea.vercel.app/borrar-cuenta |
 | Permisos de servicio en primer plano | Tipo **location**. Texto: «Pistea graba la actividad de esquí del usuario con el GPS mientras el móvil está bloqueado. La grabación la empieza y la termina el usuario, y mientras dura hay un aviso fijo visible». Google pide un **vídeo** (YouTube oculto) que enseñe: pulsar Traquear, el aviso fijo, bloquear el móvil y terminar el día |
 | Ubicación en segundo plano | No se pide (la app no usa `ACCESS_BACKGROUND_LOCATION`) |
+| Divulgación destacada de la ubicación | Hecha: antes del primer permiso, la app explica para qué usa la ubicación (pantalla «Pistea usa tu ubicación») |
+| Declaración de apps de salud (si Play Console la pide) | Marca «Actividad y fitness»: la app registra la actividad de esquí. No es una app médica |
 | App de noticias / salud / financiera | No |
 
 ## 3. Seguridad de los datos (formulario)
