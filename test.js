@@ -146,6 +146,10 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('quitar el día denunciado', (await M('POST', '/api/admin/resolve', { id: dayRep.id, action: 'quitar_dia' }))[0] === 200 && !(await Bx('GET', '/api/me'))[1].days.some(d => d.id === beaDay));
   t('descartar: vuelve a ser visible', (await M('POST', '/api/admin/resolve', { id: other1.id, action: 'descartar' }))[0] === 200 && (await A('GET', '/api/users?q=bea'))[1].length === 1);
   t('no quedan denuncias abiertas', (await M('GET', '/api/admin/reports'))[1].length === 0);
+  // Denuncias en grupo: dos cuentas recién creadas y sin verificar, más una real, no bastan para esconder a nadie
+  await R1('POST', '/api/report', { target: anaId, reason: 'spam' });
+  for (const em of ['u1@spam.es', 'u2@spam.es']) { const U = browser(); await U('POST', '/api/register', { ...REG, email: em, alias: 'Spam ' + em[1] }); await U('POST', '/api/report', { target: anaId, reason: 'spam' }); }
+  t('cuentas sin verificar no esconden a nadie con denuncias', (await Bx('GET', '/api/users?q=ana'))[1].length === 1 && (await M('GET', '/api/admin/reports'))[1].filter(r => r.target === anaId).length === 3);
   // --- panel de datos (/panel): todas las cuentas, solo para administradores y sin contraseñas
   t('panel de datos: no para cualquiera', (await A('GET', '/api/admin/panel'))[0] === 403 && (await browser()('GET', '/api/admin/panel'))[0] === 401);
   [s, j] = await M('GET', '/api/admin/panel');

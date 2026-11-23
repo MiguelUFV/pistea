@@ -284,7 +284,7 @@ function offensive(v) {
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const normEmail = v => str(v, 254).trim().toLowerCase();
 const safeAvatar = a => typeof a === 'string' && /^\/avatars\/[a-z0-9_.]+(\?v=\d+)?$/.test(a) ? a : null;
-const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? true : !!u.verified, admin: isAdmin(u) || undefined,
+const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? !ADMINS.has(u.email) : !!u.verified, admin: isAdmin(u) || undefined,   // un administrador sin verificar ve el aviso para confirmar su correo
   ...card(u), goal_days: u.goal_days || null, onboarded: !!u.onboarded, approve: !!u.approve });
 // Lo público de la ficha de esquiador (el reto de días es solo para uno mismo)
 const card = u => ({ handle: u.handle || null, since: u.since || null, terrain: J(u.terrain), wish: J(u.wish), gear: u.gear || '', club: u.club || '' });
@@ -322,7 +322,9 @@ function weakPw(pw, email, alias) {
 // Proveedor: Brevo (BREVO_API_KEY: gratis, 300/día, basta con verificar el remitente) o Resend (RESEND_API_KEY: necesita
 // dominio propio). MAIL_FROM = "Pistea <remitente@...>". Sin proveedor: en local se escribe en la consola; en producción no se envía.
 const ADMINS = new Set(String(env.ADMIN_EMAILS || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean));   // correos que moderan
-const isAdmin = u => !!u && ADMINS.has(u.email) && u.verified !== 0;
+// Solo con el correo verificado de verdad (verified = 1). Una cuenta sin verificar (NULL) se creó cuando no se podía
+// verificar: sin proveedor de correo, cualquiera podría registrar antes el correo de un administrador y ver el panel
+const isAdmin = u => !!u && ADMINS.has(u.email) && u.verified === 1;
 const blockedEither = async (a, b) => !!(await one('SELECT 1 x FROM blocks WHERE (a=? AND b=?) OR (a=? AND b=?)', [a, b, b, a]));
 // ---- parte social: avisos, solicitudes y listas de seguidores
 // Un aviso por (quién, qué, de qué día): si se repite (dejar de seguir y volver a seguir) no se acumula, solo sube al principio
@@ -405,10 +407,13 @@ const routes = {
   'POST /api/login': async ({ req, res, b }) => {
     const e = normEmail(b.email), pw = str(b.password, 200);
     if (await limited('li:' + ipOf(req), 30, 10 * MIN)) return send(res, 429, { error: 'Demasiados intentos desde esta conexión. Espera unos minutos.' });
-    if (await over('lf:' + e, 8, 15 * MIN)) return send(res, 429, { error: 'Demasiados intentos fallidos con este correo. Espera 15 minutos o recupera tu contraseña.' });
+    // Fallos con un correo: 8 cada 15 min desde una conexión y 50 por hora en total. Así un atacante no deja sin entrar a la
+    // dueña de la cuenta desde otra conexión, y la fuerza bruta repartida entre muchas sigue frenada
+    const kf = 'lf:' + e + '|' + ipOf(req);
+    if (await over(kf, 8, 15 * MIN) || await over('lfa:' + e, 50, HOUR)) return send(res, 429, { error: 'Demasiados intentos fallidos con este correo. Espera 15 minutos o recupera tu contraseña.' });
     const u = EMAIL.test(e) ? await one('SELECT * FROM users WHERE email=?', [e]) : null;
-    if (!(await checkPw(pw, u))) { await hit('lf:' + e); await audit(u && u.id, 'LOGIN_FAILED', req); return send(res, 401, { error: 'Correo o contraseña incorrectos.' }); }
-    await run('DELETE FROM hits WHERE k=?', [hk('lf:' + e)]);
+    if (!(await checkPw(pw, u))) { await hit(kf); await hit('lfa:' + e); await audit(u && u.id, 'LOGIN_FAILED', req); return send(res, 401, { error: 'Correo o contraseña incorrectos.' }); }
+    await run('DELETE FROM hits WHERE k=?', [hk(kf)]);
     if (u.banned) return send(res, 403, { error: 'Esta cuenta está suspendida por incumplir las normas. Escríbenos si crees que es un error.' });
     if (!u.hash.startsWith('s2$')) { const n = await hashPw(pw); await run('UPDATE users SET salt=?, hash=? WHERE id=?', [n.salt, n.hash, u.id]); }   // renueva hashes antiguos
     setSession(req, res, await newToken(u, req)); await audit(u.id, 'LOGIN', req);
@@ -452,7 +457,7 @@ const routes = {
     fresh(); await audit(v.uid, 'EMAIL_VERIFIED', req); send(res, 200, { ok: true });
   },
   'POST /api/verify/resend': async ({ req, res, u }) => {
-    if (u.verified === null || u.verified) return send(res, 200, { ok: true, verified: true });
+    if (u.verified === 1 || (u.verified === null && !ADMINS.has(u.email))) return send(res, 200, { ok: true, verified: true });   // un administrador antiguo sin verificar sí puede pedir el correo
     if (await limited('vr:' + u.id, 3, HOUR)) return send(res, 429, { error: 'Ya te hemos mandado varios correos. Revisa también la carpeta de spam o inténtalo en una hora.' });
     if (!(await sendVerify(u))) return send(res, 503, { error: 'No se ha podido enviar el correo. Inténtalo más tarde.' });
     send(res, 200, { ok: true });
@@ -819,7 +824,9 @@ const routes = {
     if (day && !(await one('SELECT 1 x FROM days WHERE id=? AND uid=?', [day, target]))) return send(res, 400, { error: 'Día no válido.' });
     if (!(await one("SELECT 1 x FROM reports WHERE reporter=? AND target=? AND COALESCE(day,'')=? AND status='open'", [u.id, target, day || '']))) {
       await run('INSERT INTO reports(id,reporter,target,day,reason,note,ts) VALUES(?,?,?,?,?,?,?)', [rid(), u.id, target, day, reason, note, Date.now()]);
-      const n = await count("SELECT COUNT(DISTINCT reporter) n FROM reports WHERE target=? AND status='open'", [target]);
+      // Para ocultar a alguien solo cuentan las denuncias de personas visibles (verificadas, ni ocultas ni suspendidas): tres
+      // cuentas recién creadas sin verificar no pueden esconder a nadie. Las demás denuncias le llegan igual al moderador
+      const n = await count(`SELECT COUNT(DISTINCT r.reporter) n FROM reports r JOIN users p ON p.id=r.reporter WHERE r.target=? AND r.status='open' AND ${pubCond('p.')}`, [target]);
       if (n >= 3) { await run('UPDATE users SET hidden=1 WHERE id=?', [target]); fresh(); }   // tres personas distintas: se oculta hasta revisarlo
       if (MAIL_READY) for (const a of ADMINS) sendMail(a, 'Nueva denuncia en Pistea', mail('Nueva denuncia', `Motivo: ${reason}. Denuncias abiertas contra ese usuario: ${n}.`, 'Revisar', APP_URL + '/', 'Entra con tu cuenta de administrador y abre Perfil → Moderación.')).catch(() => {});
     }

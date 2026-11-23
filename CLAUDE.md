@@ -2,13 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Pistea es la red social de esquiadores de toda España (27 estaciones): grabar el día con el GPS («traquear»), rankings, liga semanal, comunidad, perfil y el mapa 3D de cada estación. Producción: https://pistea.vercel.app. Todo el texto de interfaz, comentarios y documentación va en español. Además de este fichero, la documentación es `DEPLOY.md` (puesta en producción y motor del día), `SEGURIDAD.md` (auditoría, decisiones de seguridad y lo que le falta hacer a Miguel) y `app/PLAY_STORE.md`.
+Pistea es la red social de esquiadores de toda España (27 estaciones): grabar el día con el GPS («traquear»), rankings, liga semanal, comunidad, perfil y el mapa 3D de cada estación. Producción: https://pistea.vercel.app. Todo el texto de interfaz, comentarios y documentación va en español. Además de este fichero, la documentación es `DEPLOY.md` (puesta en producción y motor del día), `SEGURIDAD.md` (auditoría, decisiones de seguridad y lo que le falta hacer a Miguel), `LEGAL.md` (auditoría legal y de Google Play y la App Store, 23-nov-2026) y `app/PLAY_STORE.md`.
 
 ## Comandos
 ```
 npm install            # una sola dependencia: @libsql/client
 npm start              # http://localhost:3000; sin TURSO_* usa pistea.sqlite (o el de DATA_DIR)
-npm test               # test.js: unas 210 comprobaciones de extremo a extremo (210 el 18-nov-2026)
+npm test               # test.js: unas 210 comprobaciones de extremo a extremo (211 el 23-nov-2026)
 node scripts/banco_seguimiento.js 12    # banco del motor del día: antes y después de tocar public/calc.js
 ```
 - `npm test` arranca `server.js` en el puerto 3199 con una BD temporal, quita las variables de Turso, recorre la API como un navegador (cookie y cabecera `X-Pistea`) y reinicia el servidor para comprobar que nada se pierde. Es un guion lineal: no hay forma de lanzar una sola prueba; para probar algo suelto, levantar el servidor a mano y llamar a la API.

@@ -7,6 +7,11 @@ Material listo en `app/store/`:
 
 App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (versión 1.0.0, versionCode 1, carga https://pistea.vercel.app).
 
+> **Antes de subir nada, lee `LEGAL.md` (23-nov-2026).** Hay que resolver tres cosas que Google mira:
+> - El aviso «Hay una versión nueva», que descarga una APK fuera de Play, debe quedar desactivado en la versión de Play (L3).
+> - La velocidad no puede ser una competición (L2).
+> - Los días deben ser privados por defecto (L1).
+
 ## 0. Antes de empezar
 - **Cuenta de desarrollador de Google Play**: pago único de 25 USD y verificación de identidad.
 - **Cuentas personales nuevas**: Google exige una **prueba cerrada con al menos 12 personas durante 14 días** antes de poder publicar para todos. Empieza por ahí (Pruebas → Prueba cerrada).
