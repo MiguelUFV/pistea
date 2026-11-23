@@ -378,7 +378,20 @@ function mail(title, intro, cta, link, outro) {
 </table><p style="font-size:11.5px;color:#999">Recibes este correo porque alguien usó esta dirección en Pistea.</p></td></tr></table></body></html>`;
   return { html, text: `${title}\n\n${intro}\n\n${cta}: ${link}\n\n${outro}` };
 }
-async function sendMail(to, subject, { html, text }) {
+// Tope diario de correos: el plan gratuito de Brevo manda 300 al día. Sin tope, alguien que registre cuentas con correos
+// ajenos desde muchas conexiones gastaría el cupo y dejaría a todos sin verificar ni recuperar la contraseña (S5). Al
+// llegar al 80 % se avisa una vez al día a los administradores; al llegar al tope, no se envía nada más hasta el día siguiente
+const MAIL_MAX = +env.MAIL_DAY_MAX || 280;
+async function sendMail(to, subject, msg) {
+  if (MAIL_READY) {
+    if (await over('mail:dia', MAIL_MAX, DAY)) { console.error('[correo] tope diario alcanzado: no se envía'); return false; }
+    await hit('mail:dia');
+    if (ADMINS.size && await over('mail:dia', Math.floor(MAIL_MAX * 0.8), DAY) && !(await limited('mail:aviso', 1, DAY)))
+      for (const a of ADMINS) deliver(a, 'Pistea: se está gastando el cupo diario de correos', mail('Cupo de correos al 80 %', `Hoy se han enviado más de ${Math.floor(MAIL_MAX * 0.8)} correos de ${MAIL_MAX}. Si no es normal, puede ser alguien registrando cuentas con correos ajenos: revisa el panel y activa la protección contra robots (Cloudflare Turnstile).`, 'Abrir el panel', APP_URL + '/panel', 'Al llegar al tope, Pistea deja de enviar correos hasta el día siguiente.')).catch(() => {});
+  }
+  return deliver(to, subject, msg);
+}
+async function deliver(to, subject, { html, text }) {
   try {
     if (env.BREVO_API_KEY) {
       const r = await fetch('https://api.brevo.com/v3/smtp/email', { method: 'POST', headers: { 'api-key': env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ sender: FROM, to: [{ email: to }], subject, htmlContent: html, textContent: text }) });
@@ -396,6 +409,18 @@ async function sendVerify(u) {
   const t = crypto.randomBytes(32).toString('hex'), link = `${APP_URL}/?verify=${t}`;
   await atomic([['DELETE FROM verifs WHERE uid=?', [u.id]], ['INSERT INTO verifs(th,uid,exp) VALUES(?,?,?)', [sha(t), u.id, Date.now() + 2 * DAY]]]);
   return sendMail(u.email, 'Confirma tu correo en Pistea', mail(`Hola, ${u.alias}`, 'Confirma que este correo es tuyo para aparecer en los rankings y en la comunidad de Pistea.', 'Confirmar mi correo', link, 'El enlace caduca en 48 horas. Si no has creado una cuenta en Pistea, ignora este correo.'));
+}
+
+// ---------- protección contra robots (opcional): Cloudflare Turnstile en el alta y en «¿Olvidaste tu contraseña?» ----------
+// Se activa con TURNSTILE_SITE_KEY y TURNSTILE_SECRET. Si Cloudflare no responde, no deja pasar (mejor un reintento que bots)
+const CAPTCHA = env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET ? env.TURNSTILE_SECRET : null;
+async function human(req, token) {
+  if (!CAPTCHA) return true;
+  if (typeof token !== 'string' || !token || token.length > 2048) return false;
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ secret: CAPTCHA, response: token, remoteip: ipOf(req) }) });
+    return !!(await r.json()).success;
+  } catch (e) { console.error('[turnstile]', e.message); return false; }
 }
 
 // ---------- moderación: avisos con los motivos (Reglamento de Servicios Digitales, art. 16 y 17) ----------
@@ -418,6 +443,7 @@ const routes = {
     // 10 cuentas creadas por hora y conexión, y 40 intentos (los fallos de validación también cuentan, pero menos)
     if (await over('reg:' + ipOf(req), 10, HOUR) || await limited('rega:' + ipOf(req), 40, HOUR)) return send(res, 429, { error: 'Demasiados registros desde esta conexión. Inténtalo más tarde.' });
     if (str(b.web, 200)) return send(res, 400, { error: 'No se ha podido crear la cuenta.' });   // campo trampa: solo lo rellenan los bots
+    if (!(await human(req, b.captcha))) return send(res, 400, { error: 'Confirma que no eres un robot y vuelve a intentarlo.' });
     const e = normEmail(b.email), a = text(b.alias, 24), pw = str(b.password, 200);
     if (!EMAIL.test(e)) return send(res, 400, { error: 'Correo no válido.' });
     if (a.length < 2) return send(res, 400, { error: 'El nombre debe tener entre 2 y 24 caracteres.' });
@@ -455,6 +481,7 @@ const routes = {
     const e = normEmail(b.email);
     if (!EMAIL.test(e)) return send(res, 400, { error: 'Correo no válido.' });
     if (await limited('fg:' + ipOf(req), 10, HOUR) || await limited('fg:' + e, 3, HOUR)) return send(res, 429, { error: 'Demasiadas solicitudes. Inténtalo en una hora.' });
+    if (!(await human(req, b.captcha))) return send(res, 400, { error: 'Confirma que no eres un robot y vuelve a intentarlo.' });
     const u = await one('SELECT id, alias FROM users WHERE email=?', [e]);
     if (u) {   // se envía ANTES de responder: en Vercel lo que va después de la respuesta se corta
       const t = crypto.randomBytes(32).toString('hex'), link = `${APP_URL}/?reset=${t}`;
@@ -585,7 +612,13 @@ const routes = {
       seguidores: (await all('SELECT u.alias alias FROM follows f JOIN users u ON u.id=f.a WHERE f.b=?', [u.id])).map(r => r.alias),
       solicitudes_de_seguimiento_pendientes: (await all('SELECT u.alias alias FROM follow_requests r JOIN users u ON u.id=r.b WHERE r.a=?', [u.id])).map(r => r.alias),
       sesiones_abiertas: await all('SELECT created, exp, ua FROM tokens WHERE uid=? AND exp>?', [u.id, Date.now()]),
-      registro_de_seguridad: await all('SELECT action, ip, ua, ts FROM audit_logs WHERE uid=? ORDER BY ts ASC', [u.id]) };
+      registro_de_seguridad: await all('SELECT action, ip, ua, ts FROM audit_logs WHERE uid=? ORDER BY ts ASC', [u.id]),
+      apoyos_dados: await all('SELECT k.day dia, x.alias de FROM kudos k JOIN days d ON d.id=k.day JOIN users x ON x.id=d.uid WHERE k.uid=?', [u.id]),
+      apoyos_recibidos: await all('SELECT k.day dia, COUNT(*) apoyos FROM kudos k JOIN days d ON d.id=k.day WHERE d.uid=? GROUP BY k.day', [u.id]),
+      bloqueos: (await all('SELECT x.alias alias, b.ts ts FROM blocks b JOIN users x ON x.id=b.b WHERE b.a=?', [u.id])),
+      denuncias_enviadas: await all('SELECT x.alias a, r.day dia, r.reason motivo, r.note nota, r.status estado, r.ts ts FROM reports r LEFT JOIN users x ON x.id=r.target WHERE r.reporter=? ORDER BY r.ts ASC', [u.id]),
+      avisos: await all('SELECT n.kind tipo, x.alias de, n.day dia, n.ts ts FROM notifs n LEFT JOIN users x ON x.id=n.actor WHERE n.uid=? ORDER BY n.ts ASC', [u.id]),
+      foto: await (async () => { const a = await one('SELECT mime, data FROM avatars WHERE uid=?', [u.id]); return a ? `data:${a.mime};base64,${Buffer.from(a.data).toString('base64')}` : null; })() };
     await audit(u.id, 'DATA_EXPORT', req);
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="pistea-mis-datos-${Date.now()}.json"`, 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(data, null, 2));
@@ -652,7 +685,7 @@ const routes = {
     }
     send(res, 200, out.sort((a, b) => b.n.n - a.n.n || a.name.localeCompare(b.name, 'es')));
   },
-  // Pistea Wrapped: la temporada (desde el 1 de julio) contada en cifras, con su pista favorita, la más rápida y el puesto
+  // Tu temporada (antes «Wrapped»): la temporada (desde el 1 de julio) contada en cifras, con su pista favorita, la más rápida y el puesto
   'GET /api/wrapped': async ({ res, u }) => {
     const since = seasonStart();
     const days = await all(`SELECT id, station, ts, desnivel, km, horas, bajadas, vmax, freeride, detail FROM days WHERE uid=? AND ts>=? AND ${SRC} ORDER BY ts`, [u.id, since]);
@@ -927,7 +960,7 @@ const routes = {
     await audit(u.id, 'ADMIN_PANEL', req, { users: out.length });
     send(res, 200, { now: Date.now(), users: out, days: days.map(d => [d.uid, d.station, d.ts, d.desnivel, d.km, d.bajadas, d.vmax, d.freeride, d.src]), reports: open, stations: Object.fromEntries(STATIONS.map(s => [s[0], s[1]])) });
   },
-  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK })
+  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK, captcha: CAPTCHA ? env.TURNSTILE_SITE_KEY : null })
 };
 
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------
@@ -958,7 +991,7 @@ async function serveAvatar(req, res, name) {
 }
 const PAGE_HEADERS = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'SAMEORIGIN', 'Cross-Origin-Opener-Policy': 'same-origin',
   'Permissions-Policy': `geolocation=(self${MAPS_ORIGIN ? ` "${MAPS_ORIGIN}"` : ''}), camera=(), microphone=(), payment=(), usb=()`,
-  'Content-Security-Policy': `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'${MAPS_ORIGIN ? ' ' + MAPS_ORIGIN : ''}; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'` };
+  'Content-Security-Policy': `default-src 'self'; script-src 'self'${CAPTCHA ? ' https://challenges.cloudflare.com' : ''}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-src 'self'${MAPS_ORIGIN ? ' ' + MAPS_ORIGIN : ''}${CAPTCHA ? ' https://challenges.cloudflare.com' : ''}; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'` };
 
 async function handler(req, res) {
   try {

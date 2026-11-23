@@ -230,6 +230,8 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('borrar foto', (await A('DELETE', '/api/avatar'))[0] === 200);
   // --- exportar
   [s, j, r] = await A('GET', '/api/me/export'); t('exportar mis datos', s === 200 && j.usuario?.email === 'ana@pistea.es' && /attachment/.test(r.headers.get('content-disposition')));
+  t('…con todo: apoyos, bloqueos, denuncias enviadas, avisos, foto y ajuste de privacidad', ['apoyos_dados', 'apoyos_recibidos', 'bloqueos', 'denuncias_enviadas', 'avisos', 'foto'].every(k => k in j) && Array.isArray(j.denuncias_enviadas) && j.denuncias_enviadas.length > 0 && (j.foto === null || j.foto.startsWith('data:image/')) && j.usuario.vis === 'seguidores');
+  t('sin claves, no se pide CAPTCHA', (await (await fetch(B + '/api/config')).json()).captcha === null);
   for (let i = 0; i < 3; i++) await A('POST', '/api/days', day());
   t('límite de 5 días/24 h', (await A('POST', '/api/days', day()))[0] === 429);
   t('…que se mira antes de recalcular la traza (lo caro)', /Máximo 5 días/.test((await A('POST', '/api/days', gpsDay()))[1].error || ''));
