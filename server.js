@@ -86,7 +86,7 @@ async function housekeeping(force) {   // caducidades y retención de datos (RGP
 
 // ---------- estadísticas ----------
 const WIN = { hoy: DAY, semana: 7 * DAY, temporada: 365 * DAY };
-const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', freeride: 'SUM(COALESCE(freeride,0))', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)', vmax: 'MAX(vmax)' };   // lista cerrada: nunca entra texto del usuario en el SQL
+const MX = { desnivel: 'SUM(desnivel)', km: 'SUM(km)', freeride: 'SUM(COALESCE(freeride,0))', horas: 'SUM(horas)', bajadas: 'SUM(bajadas)', dias: 'COUNT(*)' };   // lista cerrada: nunca entra texto del usuario en el SQL. Sin velocidad: en una pista abierta no se compite por ir más rápido
 // ---------- antitrampas: el día se recalcula en el servidor desde la traza GPS (que no se guarda) ----------
 const distKm = (a, b) => { const r = Math.PI / 180, x = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) / 2 * r), y = (b.lat - a.lat) * r; return Math.hypot(x, y) * 6371; };
 function checkTrace(trace, station) {
@@ -234,17 +234,13 @@ const isPub = u => (!VERIFY || u.verified !== 0) && !u.hidden && !u.banned;
 // Lo que un día nuevo trae al pasaporte y a los récords: pistas nuevas, mejores marcas propias y pistas en las que pasa a
 // ser el más rápido de la temporada (contra lo guardado antes de este día)
 async function novelties(u, station, detail) {
+  // Lo que un día nuevo trae al pasaporte: las pistas que aún no tenía. No hay coronas ni «mejores marcas» de velocidad:
+  // Pistea no premia ir más rápido en pistas abiertas
   const P = passesOf(detail); if (!P.size) return { nuevas: [], pr: [], top: [] };
-  const names = [...P.keys()], qs = names.map(() => '?').join(','), since = Date.now() - WIN.temporada;
-  const [mine, others] = await Promise.all([
-    all(`SELECT piste, MAX(COALESCE(vmax,0)) v FROM passes WHERE uid=? AND station=? AND piste IN (${qs}) GROUP BY piste`, [u.id, station, ...names]),
-    all(`SELECT p.piste piste, MAX(p.vmax) v FROM passes p JOIN users u ON u.id=p.uid WHERE p.station=? AND p.ts>=? AND p.uid!=? AND p.piste IN (${qs}) AND ${pubU()} GROUP BY p.piste`, [station, since, u.id, ...names])]);
-  const M = new Map(mine.map(r => [r.piste, r.v])), O = new Map(others.map(r => [r.piste, r.v || 0])), r1 = v => Math.round(v);
-  const nuevas = names.filter(n => !M.has(n)).map(n => [n, P.get(n).c]);
-  const pr = names.filter(n => M.has(n) && M.get(n) > 0 && P.get(n).v > M.get(n) + 0.5).map(n => [n, r1(P.get(n).v), r1(M.get(n))]);
-  const top = isPub(u) ? names.filter(n => P.get(n).v > 0 && P.get(n).v > (O.get(n) || 0) && !(M.get(n) >= P.get(n).v)).map(n => [n, r1(P.get(n).v)]) : [];
-  const crowned = new Set(top.map(x => x[0]));   // la corona ya dice que es su mejor marca
-  return { nuevas, pr: pr.filter(x => !crowned.has(x[0])), top };
+  const names = [...P.keys()], qs = names.map(() => '?').join(',');
+  const mine = await all(`SELECT DISTINCT piste FROM passes WHERE uid=? AND station=? AND piste IN (${qs})`, [u.id, station, ...names]);
+  const M = new Set(mine.map(r => r.piste));
+  return { nuevas: names.filter(n => !M.has(n)).map(n => [n, P.get(n).c]), pr: [], top: [] };
 }
 
 // ---------- utilidades HTTP, sesiones y límites ----------
@@ -612,8 +608,7 @@ const routes = {
     if (sts.length && isPub(u)) {
       const per = await groupedPasses(sts, u.id);
       for (const [key, us] of per) {
-        const [id, k] = key.split('\u0001'), L = [...us.values()], bv = L.filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.t - b.t)[0], bn = L.sort((a, b) => b.n - a.n || a.t - b.t)[0];
-        if (bv && bv.uid === u.id) crowns.v.push([id, k, Math.round(bv.v)]);
+        const [id, k] = key.split('\u0001'), bn = [...us.values()].sort((a, b) => b.n - a.n || a.t - b.t)[0];   // corona: quien más la ha bajado (no hay corona de velocidad)
         if (bn && bn.uid === u.id && bn.n >= 2) crowns.n.push([id, k, bn.n]);
       }
     }
@@ -627,13 +622,12 @@ const routes = {
     const id = q.get('station'), name = text(q.get('name'), 80);
     if (!SID.has(id) || !name) return send(res, 400, { error: 'Pista no válida.' });
     const per = (await groupedPasses(stationsFor(id), u.id, [name, `${name} (${SNAME[id]})`])).get(id + '\u0001' + name) || new Map();
-    const L = [...per.values()], by = k => L.filter(x => x[k] > 0).sort((a, b) => b[k] - a[k] || a.t - b.t);
-    const sp = by('v'), rn = by('n'), me = per.get(u.id), row = k => (x, i) => ({ pos: i + 1, alias: x.alias, avatar: safeAvatar(x.avatar), v: k === 'v' ? Math.round(x.v) : x.n, me: x.uid === u.id });
+    const L = [...per.values()], rn = L.filter(x => x.n > 0).sort((a, b) => b.n - a.n || a.t - b.t), me = per.get(u.id), row = (x, i) => ({ pos: i + 1, alias: x.alias, avatar: safeAvatar(x.avatar), v: x.n, me: x.uid === u.id });
     const mine = (await all(`SELECT station s, piste p, SUM(n) n, MIN(ts) t, MAX(vmax) v FROM passes WHERE uid=? AND station IN (${stationsFor(id).map(() => '?').join(',')}) AND piste IN (?,?) GROUP BY station, piste`,
       [u.id, ...stationsFor(id), name, `${name} (${SNAME[id]})`])).filter(r => canon(r.s, r.p).join('\u0001') === id + '\u0001' + name);
     const L2 = pisteList(id);
-    send(res, 200, { station: id, name, c: (L2 && L2.get(name)) || null, skiers: L.length, speed: sp.slice(0, 10).map(row('v')), runs: rn.slice(0, 10).map(row('n')),
-      me: { posV: me && me.v > 0 ? sp.indexOf(me) + 1 : 0, posN: me ? rn.indexOf(me) + 1 : 0, v: me ? Math.round(me.v) : 0, n: me ? me.n : 0 },
+    send(res, 200, { station: id, name, c: (L2 && L2.get(name)) || null, skiers: L.length, runs: rn.slice(0, 10).map(row),
+      me: { posN: me ? rn.indexOf(me) + 1 : 0, n: me ? me.n : 0 },
       mine: mine.length ? { n: mine.reduce((a, r) => a + r.n, 0), t: Math.min(...mine.map(r => r.t)), v: Math.round(Math.max(...mine.map(r => r.v || 0))) } : null });
   },
   // Los récords de una estación: por pista, el más rápido y el que más la ha bajado esta temporada, y lo mío
@@ -642,11 +636,10 @@ const routes = {
     const per = await groupedPasses(stationsFor(id), u.id), L = pisteList(id), out = [];
     for (const [key, us] of per) {
       const [s, k] = key.split('\u0001'); if (s !== id) continue;
-      const A = [...us.values()], bv = A.filter(x => x.v > 0).sort((a, b) => b.v - a.v || a.t - b.t)[0], bn = A.slice().sort((a, b) => b.n - a.n || a.t - b.t)[0], me = us.get(u.id);
-      out.push({ name: k, c: (L && L.get(k)) || A[0].c, skiers: A.length, v: bv ? { alias: bv.alias, v: Math.round(bv.v), me: bv.uid === u.id } : null,
-        n: { alias: bn.alias, n: bn.n, me: bn.uid === u.id }, mine: me ? { v: Math.round(me.v), n: me.n } : null });
+      const A = [...us.values()], bn = A.slice().sort((a, b) => b.n - a.n || a.t - b.t)[0], me = us.get(u.id);
+      out.push({ name: k, c: (L && L.get(k)) || A[0].c, skiers: A.length, n: { alias: bn.alias, n: bn.n, me: bn.uid === u.id }, mine: me ? { v: Math.round(me.v), n: me.n } : null });
     }
-    send(res, 200, out.sort((a, b) => (b.v ? b.v.v : 0) - (a.v ? a.v.v : 0) || a.name.localeCompare(b.name, 'es')));
+    send(res, 200, out.sort((a, b) => b.n.n - a.n.n || a.name.localeCompare(b.name, 'es')));
   },
   // Pistea Wrapped: la temporada (desde el 1 de julio) contada en cifras, con su pista favorita, la más rápida y el puesto
   'GET /api/wrapped': async ({ res, u }) => {
@@ -667,17 +660,11 @@ const routes = {
       if (o) { o.n += r.n; o.v = Math.max(o.v, r.v || 0); } else P.set(key, { s, p: k, c: r.c, n: r.n, v: r.v || 0 });
     }
     const PL = [...P.values()], fav = PL.slice().sort((a, b) => b.n - a.n)[0] || null, fastP = PL.filter(x => x.v > 0).sort((a, b) => b.v - a.v)[0] || null;
-    let fastRank = null;
-    if (fastP) {
-      const per = (await groupedPasses(stationsFor(fastP.s), u.id, [fastP.p, `${fastP.p} (${SNAME[fastP.s]})`])).get(fastP.s + '\u0001' + fastP.p);
-      const vs = per ? [...per.values()].map(x => x.v) : [], mine = per && per.get(u.id) ? per.get(u.id).v : 0;
-      fastRank = { pos: vs.filter(v => v > mine).length + 1, total: vs.filter(v => v > 0).length };
-    }
     const pos = await posOf(u.id, 'desnivel', null, 'temporada');
     send(res, 200, { since, alias: u.alias, dias: days.length, desnivel: sum('desnivel'), km: sum('km'), horas: sum('horas'), bajadas: sum('bajadas'), freeride: sum('freeride'),
       vmax: fast.vmax, vmaxAt: { station: fast.station, ts: fast.ts }, m, stations: Object.keys(byStation).length, top: { station: top[0], dias: top[1] },
       best: { station: best.station, ts: best.ts, desnivel: best.desnivel, km: best.km, bajadas: best.bajadas }, months, pistes: PL.length,
-      fav: fav && { station: fav.s, name: fav.p, c: fav.c, n: fav.n }, fast: fastP && { station: fastP.s, name: fastP.p, c: fastP.c, v: Math.round(fastP.v), ...fastRank },
+      fav: fav && { station: fav.s, name: fav.p, c: fav.c, n: fav.n }, fast: fastP && { station: fastP.s, name: fastP.p, c: fastP.c, v: Math.round(fastP.v) },
       pos: pos ? { pos: pos.pos, total: pos.total } : null, first: days[0].ts, last: days[days.length - 1].ts });
   },
   'GET /api/stations': async ({ res, u }) => {

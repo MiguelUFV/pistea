@@ -251,6 +251,8 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('el mismo día dos veces', (await G('POST', '/api/days', real))[0] === 409);
   t('la traza no se guarda (solo el recorrido simplificado)', !(await db.execute('PRAGMA table_info(days)')).rows.some(r => /trace|lat|lon/.test(r.name)) && (tr => tr.length <= 500 && tr.every(p => p.length === 3))(JSON.parse((await db.execute("SELECT track FROM days WHERE src='gps' LIMIT 1")).rows[0].track)));
   t('ranking de freeride', (await G('GET', '/api/rank?metric=freeride'))[0] === 200);
+  const rv = (await G('GET', '/api/rank?metric=vmax'))[1], rdv = (await G('GET', '/api/rank?metric=desnivel'))[1];
+  t('no hay ranking de velocidad (se ignora la métrica)', JSON.stringify(rv.rows) === JSON.stringify(rdv.rows));
   // --- pasaporte de pistas, récords por pista y Wrapped (del desglose del día GPS: tres veces Bola II)
   t('cada tramo lleva su máxima', dt && dt.runs.every(r => r[5].every(g => g.length === 4 && g[3] >= 0)) && dt.runs.some(r => r[5].some(g => /^Bola II/.test(g[1]) && g[3] > 20 && g[3] <= r[4])), JSON.stringify(dt && dt.runs[0][5]));
   t('al guardar: pista nueva en el pasaporte', j.nov && j.nov.nuevas.some(p => p[0] === 'Bola II'), JSON.stringify(j.nov));
@@ -259,17 +261,17 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   const pp = (await G('GET', '/api/passport'))[1];
   t('pasaporte: Bola II en Valdesquí', (pp.stations.valdesqui || []).some(p => p[0] === 'Bola II' && p[2] === 3) && pp.rank && pp.rank.pos === 1, JSON.stringify(pp).slice(0, 300));
   const ps = (await G('GET', '/api/piste?station=valdesqui&name=' + encodeURIComponent('Bola II')))[1];
-  t('ficha de pista: primero en velocidad y en bajadas', ps.speed[0] && ps.speed[0].me && ps.runs[0].v === 3 && ps.me.posV === 1 && ps.me.posN === 1 && ps.mine && ps.mine.n === 3 && ps.c === 'a', JSON.stringify(ps).slice(0, 300));
+  t('ficha de pista: primero en bajadas, sin clasificación de velocidad', !('speed' in ps) && ps.runs[0].v === 3 && ps.runs[0].me && ps.me.posN === 1 && ps.mine && ps.mine.n === 3 && ps.mine.v > 0 && ps.c === 'a', JSON.stringify(ps).slice(0, 300));
   t('ficha de pista sin estación', (await G('GET', '/api/piste?station=nada&name=x'))[0] === 400);
   const rc = (await G('GET', '/api/records?station=valdesqui'))[1];
-  t('récords de la estación', Array.isArray(rc) && rc.some(r => r.name === 'Bola II' && r.v && r.v.me && r.n.n === 3), JSON.stringify(rc).slice(0, 300));
+  t('récords de la estación: quien más la ha bajado, sin velocidades ajenas', Array.isArray(rc) && rc.some(r => r.name === 'Bola II' && !('v' in r) && r.n.me && r.n.n === 3 && r.mine && r.mine.v > 0), JSON.stringify(rc).slice(0, 300));
   const wr = (await G('GET', '/api/wrapped'))[1];
-  t('Wrapped de la temporada', wr.dias === 1 && wr.bajadas === 3 && wr.fav && wr.fav.name === 'Bola II' && wr.fast && wr.fast.pos === 1 && wr.pistes >= 1 && wr.m.a > 0, JSON.stringify(wr).slice(0, 300));
+  t('Wrapped de la temporada', wr.dias === 1 && wr.bajadas === 3 && wr.fav && wr.fav.name === 'Bola II' && wr.fast && wr.fast.v > 0 && !('pos' in wr.fast) && wr.pistes >= 1 && wr.m.a > 0, JSON.stringify(wr).slice(0, 300));
   t('Wrapped pide sesión', (await browser()('GET', '/api/wrapped'))[0] === 401);
   // …y quién sale en los récords de una pista: las cuentas públicas, la propia aunque no esté verificada, nunca un bloqueado
   const H = browser(); await H('POST', '/api/register', { ...REG, email: 'hielo@pistea.es', alias: 'Hielo Rápido' }); await browser()('POST', '/api/verify', { token: linkFor('hielo@pistea.es', 'verify') });
   t('otro esquiador con el mismo día GPS', (await H('POST', '/api/days', real))[0] === 200);
-  const bola = async X => (await X('GET', '/api/piste?station=valdesqui&name=' + encodeURIComponent('Bola II')))[1].speed.map(x => x.alias);
+  const bola = async X => (await X('GET', '/api/piste?station=valdesqui&name=' + encodeURIComponent('Bola II')))[1].runs.map(x => x.alias);
   t('récords: sale el verificado y no el que no lo está', (await bola(G)).includes('Hielo Rápido') && !(await bola(H)).includes('Gps Real') && (await bola(G)).includes('Gps Real'));
   const hId = (await H('GET', '/api/me'))[1].user.id;
   t('récords: un bloqueado no sale (tampoco desde la caché)', (await G('POST', '/api/block', { id: hId }))[1].blocked === true && !(await bola(G)).includes('Hielo Rápido'));
