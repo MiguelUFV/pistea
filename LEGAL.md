@@ -8,7 +8,28 @@ Revisión del **23-nov-2026**. Qué se ha revisado:
 
 La seguridad técnica está en `SEGURIDAD.md`. **No sustituye a un abogado**: antes del lanzamiento comercial conviene que un profesional revise la protección de datos y el Reglamento de Servicios Digitales.
 
-## Resumen
+## Estado tras los arreglos del 23-nov-2026
+Todo lo que se podía resolver con código, textos y documentos está hecho y publicado. Lo que queda depende de ti.
+
+| # | Punto | Estado |
+|---|---|---|
+| L1 | Días públicos con recorrido y horas | **Hecho.** «Quién ve tus días» (seguidores por defecto); sin horas para los demás; recorrido recortado; menores de 18 sin «Todos» |
+| L2 | Premiar la velocidad | **Hecho.** Sin ranking, coronas ni insignia de velocidad; la máxima, solo personal. Falta rehacer el vídeo del día (apartado 9) |
+| L3 | Aviso de APK fuera de Google Play | **Hecho.** La versión de Play (`PISTEA_CANAL=play`) no lo enseña |
+| L4 | Reglamento de Servicios Digitales | **Hecho.** Correo con medida, motivo y reclamación al afectado y la decisión a quien denunció; denunciar sin cuenta; moderación en las condiciones; punto de contacto |
+| L5 | Logotipos de las estaciones | **Hecho.** El 3D publicado ya no lleva logotipos, iconos, tipografías (Mont y Brandon, que son de pago) ni fotos oficiales |
+| L6 | iOS: web empaquetada | **Pendiente.** Hace falta el proyecto de iOS, un Mac y la cuenta de Apple; ver el apartado 8 |
+| — | Política de privacidad | **Hecho.** Las 9 correcciones del apartado 2, más el aviso en la app de los cambios |
+| — | Aviso legal y créditos y licencias | **Hecho:** `/aviso-legal` y `/licencias`. **Falta tu parte:** `LEGAL_NIF` y `LEGAL_ADDRESS` en Vercel; hasta entonces, el aviso legal enseña un recuadro amarillo |
+| — | Registro de actividades, evaluación de impacto y procedimiento de brechas | **Hecho:** borradores en `legal/`. **Falta tu parte:** revisarlos y firmar la evaluación |
+| — | Contratos de encargo (DPA) | **Tuyo:** acéptalos en Vercel, Turso, Brevo y Cloudflare |
+| — | Datos en la UE | **Tuyo:** mover Turso y la función de Vercel juntas (`SEGURIDAD.md`, T7 y S12) |
+| — | «Pistea Wrapped» | **Hecho:** ahora se llama «Tu temporada» |
+| — | Explicar el GPS antes del permiso (Google Play) | **Hecho** |
+| — | Marca «Pistea» | **Tuyo:** buscarla y registrarla en la OEPM o la EUIPO |
+| — | Estado de comerciante en las tiendas | **Tuyo:** decidirlo (apartado 4) |
+
+## Resumen (revisión inicial del 23-nov-2026)
 - **Bien:**
   - Textos legales publicados con tu nombre y un correo de contacto.
   - Consentimiento al registrarse (condiciones, privacidad y 14 años) con la fecha guardada.

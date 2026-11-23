@@ -1,11 +1,11 @@
 # Pistea · Seguridad
 
-Auditorías del 16-nov-2026 y del **23-nov-2026** de todo `pistea/` (servidor, página, app de Android, despliegue y secretos) y de lo que se hizo después, paso a paso. `npm test` comprueba **211 casos** (23-nov-2026) contra un servidor real con BD temporal, reiniciándolo para ver que nada se pierde. Lo legal y lo que piden Google Play y la App Store está en `LEGAL.md`.
+Auditorías del 16-nov-2026 y del **23-nov-2026** de todo `pistea/` (servidor, página, app de Android, despliegue y secretos) y de lo que se hizo después, paso a paso. `npm test` comprueba **228 casos** (23-nov-2026) contra un servidor real con BD temporal, reiniciándolo para ver que nada se pierde. Lo legal y lo que piden Google Play y la App Store está en `LEGAL.md`.
 
 ## Estado
 - **Cuentas que no se pierden.** El fallo grave era que, en Vercel, la base de datos se escribía en `/tmp` y se borraba. Ahora todo va a **Turso** (persistente, con conexión cifrada). Producción (https://pistea.vercel.app) ya funciona así: `/healthz` responde y las variables de Turso están en Vercel.
 - **Hecho:** sesión segura, verificación de correo (activa en producción), denunciar y bloquear con moderación, páginas legales con tus datos, antitrampas, CSP estricta y app de Android firmada.
-- **23-nov-2026:** 33 pruebas de ataque contra un servidor local. Nadie puede leer datos de otras cuentas, inyectar código ni entrar sin contraseña. Se han arreglado 3 fallos (S1 a S3). Queda una decisión importante de privacidad (S4): hoy los días se ven con su recorrido y sus horas. Está en «Auditoría del 23-nov-2026».
+- **23-nov-2026:** 33 pruebas de ataque contra un servidor local: nadie puede leer datos de otras cuentas, inyectar código ni entrar sin contraseña. Ese mismo día se arreglaron y publicaron S1 a S5, S8 a S11 y S13 a S15, incluida la privacidad de los días (S4). Quedan S6, S7 y S12, y las tareas T.
 - **Falta** lo que solo puedes hacer tú: está al final de este documento.
 
 ## Cómo funciona una cuenta
@@ -72,28 +72,28 @@ Auditorías del 16-nov-2026 y del **23-nov-2026** de todo `pistea/` (servidor, p
 - Secretos fuera de git y `npm audit` sin vulnerabilidades.
 - Android: sin copias en la nube, sin ubicación en segundo plano, servicio no exportado y grabaciones en memoria privada.
 
-**Arreglado el 23-nov-2026** (en el código local, **sin publicar**: hace falta un `git push`):
+**Arreglado y publicado el 23-nov-2026:**
 | # | Gravedad | Problema (probado) | Arreglo |
 |---|---|---|---|
 | S1 | Alta, latente | Si en producción faltaba el proveedor de correo, las cuentas nuevas se daban por verificadas. Quien registrara antes que tú un correo de `ADMIN_EMAILS` entraba al panel con los correos de todos (en local: 200) | El panel exige `verified = 1`. Un administrador antiguo sin verificar ve «Confirma tu correo» y lo recupera al confirmarlo (en local: 403) |
 | S2 | Media | Tres cuentas recién creadas y **sin verificar** escondían a cualquiera con tres denuncias | Para ocultar solo cuentan denunciantes visibles (verificados, ni ocultos ni suspendidos). Las demás denuncias le llegan igual al moderador |
 | S3 | Media | 8 contraseñas malas con tu correo, desde cualquier conexión, te dejaban 15 min sin poder entrar | 8 fallos cada 15 min por correo **y conexión**, y 50 por hora por correo en total |
 
-**Pendiente:**
-| # | Gravedad | Problema | Qué hacer |
+**Lo demás de la auditoría** (todo publicado el 23-nov-2026, salvo lo que se indica):
+| # | Gravedad | Problema | Estado |
 |---|---|---|---|
-| S4 | **Alta (privacidad)** | Cualquier cuenta, aunque no te siga, abre tus días con su recorrido, la hora de cada bajada y los remontes. «Aprobar seguidores» no lo evita. El recorrido va en metros locales, pero `/seg/<estación>.json` publica cómo pasarlo a coordenadas GPS exactas. Hasta el 20 % de la grabación puede estar fuera de la estación, por ejemplo si empiezas a grabar en tu alojamiento. Con un día guardado «hace minutos» se sabe dónde está alguien ahora, también si es menor | **Decisión tuya.** Ajuste «quién ve mis días» (todos, seguidores o solo yo), con «seguidores» por defecto y siempre para menores de 18. Recortar el recorrido a la estación y quitar 300 m del principio y del final. No enseñar a otros la hora de cada bajada. Corregir la política de privacidad, que dice «sin coordenadas geográficas» |
-| S5 | Media | Brevo gratis manda 300 correos al día. Con varias conexiones, alguien puede registrar cuentas con correos ajenos, gastar el cupo y dejar a todos sin verificar ni recuperar la contraseña (y mandar spam desde tu remitente) | CAPTCHA que respete la privacidad (Cloudflare Turnstile) en el alta y en «¿Olvidaste tu contraseña?», un tope diario y un aviso al administrador |
-| S6 | Media | Cada intento limitado escribe una fila en la BD (`hits`). Un ataque desde muchas conexiones gasta la cuota de Turso | Regla de límite de peticiones en el Firewall de Vercel para `/api/register`, `/api/login` y `/api/forgot` (T6) |
-| S7 | Baja | El alta dice si un correo ya tiene cuenta | Decisión de usabilidad ya tomada; con S5 se encarece |
-| S8 | Baja | Un día repetido se recalcula entero (≈0,5 s) antes de ver que ya estaba guardado | Mirar el solapamiento con las horas de la traza antes del cálculo |
-| S9 | Baja | A la exportación de datos le faltan la foto, los apoyos dados, los bloqueos, las denuncias enviadas y los avisos (art. 15 RGPD) | Añadirlos |
-| S10 | Baja | Los rankings y los líderes de cada estación enseñan a usuarios bloqueados (la comunidad no) | Aplicar `notBlocked` también ahí |
-| S11 | Baja | `init_turso.js` (no está en git) se conecta a la Turso de producción con `.env.local` y trae un esquema antiguo | Borrarlo |
-| S12 | Baja | La función de Vercel corre en EE. UU. (`iad1`): más latencia y transferencias internacionales de datos | `"regions": ["fra1"]` en `vercel.json` y Turso en una región de la UE (T7) |
-| S13 | Baja | La APK se reparte desde tu Google Drive: si alguien entra en tu cuenta de Google, puede cambiar el archivo | Verificación en dos pasos (T9) y publicar la huella SHA-256 de cada APK, o pasar a Google Play |
-| S14 | Media (tiendas) | El aviso «Hay una versión nueva» manda a descargar una APK fuera de Google Play, y Google Play lo prohíbe | Desactivarlo en la versión de Play (ver `LEGAL.md`) |
-| S15 | Baja | Una grabación GPS que no se llega a guardar se queda en el móvil para siempre (CSV en memoria privada) | Borrar las de más de 30 días |
+| S4 | **Alta (privacidad)** | Cualquier cuenta abría los días de otra con el recorrido (pasable a GPS exacto con `/seg`), la hora de cada bajada y los remontes. Hasta un 20 % podía quedar fuera de la estación (el alojamiento) | **Arreglado.** Ajuste «Quién ve tus días»: todos, seguidores (por defecto) o solo yo. Con menos de 18 años no se puede elegir «todos». Los demás no ven las horas. El recorrido se recorta a la estación y sin lo anterior al primer remonte ni lo posterior a la última bajada, también en los días antiguos. «Solo yo» no sale en rankings ni récords |
+| S5 | Media | Se podía gastar el cupo de 300 correos al día de Brevo registrando cuentas con correos ajenos | **Arreglado** con un tope de 280 al día (`MAIL_DAY_MAX`) y aviso al administrador al 80 %. **Falta tu parte:** activar Cloudflare Turnstile en el alta y en recuperar contraseña poniendo `TURNSTILE_SITE_KEY` y `TURNSTILE_SECRET` (T11) |
+| S6 | Media | Cada intento limitado escribe en la BD (`hits`): un ataque desde muchas conexiones gasta la cuota de Turso | **Tuyo** (T6): regla de límite de peticiones en el Firewall de Vercel para `/api/register`, `/api/login` y `/api/forgot` |
+| S7 | Baja | El alta dice si un correo ya tiene cuenta | Decisión de usabilidad que se mantiene; con el tope de correos y Turnstile sale caro abusar |
+| S8 | Baja | Un día repetido se recalculaba entero antes de ver que ya estaba guardado | **Arreglado:** se mira con las horas de la traza antes del cálculo |
+| S9 | Baja | A la exportación le faltaban la foto, los apoyos, los bloqueos, las denuncias enviadas y los avisos | **Arreglado** |
+| S10 | Baja | Rankings y líderes de cada estación enseñaban a usuarios bloqueados | **Arreglado** |
+| S11 | Baja | `init_turso.js` se conectaba a la Turso de producción con `.env.local` | **Arreglado:** está en la papelera de reciclaje |
+| S12 | Baja | Función de Vercel y base de datos en EE. UU. (`iad1` y `aws-us-east-1`) | **Tuyo** (T7): mover las dos juntas a la UE. Mover solo la función ralentizaría cada consulta |
+| S13 | Baja | La APK de Drive no tenía forma de comprobarse | **Arreglado:** huella SHA-256 de cada APK en `app/PLAY_STORE.md`. Activa la verificación en dos pasos de Google (T9) |
+| S14 | Media (tiendas) | El aviso «Hay una versión nueva» descarga una APK fuera de Google Play, y Play lo prohíbe | **Arreglado:** la versión de Play se compila con `PISTEA_CANAL=play` y no lo enseña |
+| S15 | Baja | Las grabaciones que nunca se guardaban se quedaban en el móvil para siempre | **Arreglado** en Android 1.2.0: se borran a los 30 días |
 
 ## Lo que tienes que hacer tú
 | # | Qué | Dónde |
@@ -103,11 +103,13 @@ Auditorías del 16-nov-2026 y del **23-nov-2026** de todo `pistea/` (servidor, p
 | T3 | **Moderador**: `ADMIN_EMAILS` con tu correo en Vercel | Ídem |
 | T4 | **Google Play**: cuenta (25 USD), prueba cerrada con 12 personas durante 14 días, ficha, formulario de datos y vídeo del servicio de ubicación | `app/PLAY_STORE.md` |
 | T5 | **Copia de la llave de firma**: `app/android/pistea-upload.jks` y `keystore.properties` | Fuera del ordenador |
-| T6 | **Vercel**: el plan gratuito no permite uso comercial. Los mapas 3D (de 40 a 75 MB por vista) ya se sirven desde Cloudflare Pages, fuera de Vercel. Activa el Firewall o el Attack Challenge si hay ataques | Vercel → Settings |
+| T6 | **Vercel**: el plan gratuito no permite uso comercial. Los mapas 3D (de 40 a 75 MB por vista) ya se sirven desde Cloudflare Pages, fuera de Vercel. Crea una regla de límite de peticiones en el Firewall para `/api/register`, `/api/login` y `/api/forgot` (S6), y usa el Attack Challenge si hay ataques | Vercel → Settings |
 | T7 | **Turso**: probar a restaurar una copia y elegir una región de la UE | Panel de Turso |
-| T8 | **Permiso de las estaciones** para usar su nombre y su marca. El mapa 3D enseña logotipos oficiales | — |
+| T8 | ~~**Logotipos de las estaciones**~~ Hecho el 23-nov-2026: el 3D ya no lleva logotipos, iconos, tipografías ni fotos oficiales (compilación `build:pistea` de Estaciones3D). El nombre de cada estación se usa solo para decir dónde se esquía. Pedirles permiso sigue siendo buena idea si queréis colaborar | — |
 | T9 | **Verificación en dos pasos** en todas las cuentas que dan acceso a datos o al código: Google (Drive, Play), GitHub, Vercel, Turso, Brevo y Cloudflare | Ajustes de seguridad de cada una |
-| T10 | **Tras publicar S1**: entra con tu cuenta de administrador. Si no ves el panel, pulsa «Confirma tu correo» y abre el enlace | Perfil |
+| T10 | **Ya publicado S1**: entra con tu cuenta de administrador. Si no ves el panel, pulsa «Confirma tu correo» y abre el enlace | Perfil |
+| T11 | **Cloudflare Turnstile** (gratis): crea un widget para `pistea.vercel.app` y pon `TURNSTILE_SITE_KEY` y `TURNSTILE_SECRET` en Vercel. Hasta entonces, el alta funciona sin CAPTCHA | Cloudflare → Turnstile; Vercel → Environment Variables |
+| T12 | **APK antiguas**: borra de Google Drive las versiones 1 y 2 (`Pistea.apk` de los días 18 y 19). La vigente es la 1.2.0, la del 23-nov-2026 | Google Drive |
 
 ## Recomendaciones que quedan
 - **El 3D en otro dominio**: hecho el 17-nov-2026. Se sirve desde https://pistea-mapas.pages.dev (Cloudflare Pages), otro origen, en un `iframe` permitido solo por `frame-src`.

@@ -12,13 +12,14 @@
   - Base de datos: `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`. Ya están.
   - Correo: `BREVO_API_KEY` y `MAIL_FROM`.
   - Páginas legales: `LEGAL_NAME` y `LEGAL_EMAIL`. Para el aviso legal (`/aviso-legal`), `LEGAL_NIF` y `LEGAL_ADDRESS`: hasta que estén, la página enseña un aviso amarillo.
+  - Opcionales: `TURNSTILE_SITE_KEY` y `TURNSTILE_SECRET` (CAPTCHA de Cloudflare en el alta y en recuperar contraseña) y `MAIL_DAY_MAX` (tope diario de correos; 280 por defecto, para el plan gratuito de Brevo).
   - Moderadores y panel de datos: `ADMIN_EMAILS` (correos separados por comas). Esas cuentas, con el correo verificado, moderan las denuncias y abren https://pistea.vercel.app/panel: todas las cuentas con sus datos, gráficas, informe y descarga para Excel.
   - Opcional: `APP_URL`, si usas un dominio propio.
   - Tras cambiar una variable hay que publicar de nuevo (Deployments → ⋯ → Redeploy).
 - **Mapas 3D: en Cloudflare Pages** (proyecto `pistea-mapas`, https://pistea-mapas.pages.dev), gratis y sin límite de tráfico; cada vista del 3D descarga entre 40 y 75 MB. A Vercel solo sube su relieve (`dem.u16d`, para el motor del día; ver `.vercelignore`): con los mapas dentro de la función, el 16-nov-2026 el «Functions Storage» llegó a unos 18 GB (el plan gratuito da 10). `/3d/…` redirige allí, salvo el relieve. Tras recompilar los mapas, **desde una carpeta fuera de Pistea**: `npx wrangler pages deploy <ruta>/pistea/mapas --project-name pistea-mapas --branch main` (la primera vez, `npx wrangler login`). Dentro de la carpeta, wrangler 4 «autoconfigura» Pistea como un Worker: cambia `package.json` y `.gitignore` y crea `wrangler.jsonc`. Para otra dirección, la variable `MAPS_URL`.
 - **Plan**: el plan gratuito de Vercel no permite uso comercial. Para lanzar, plan Pro o servidor propio.
 - **Pistas recalculadas (cambio de nombres o colores en Estaciones3D)**, en este orden:
-  1. En Estaciones3D: `build_assets.py` de cada estación tocada y `cd web && npm run build`.
+  1. En Estaciones3D: `build_assets.py` de cada estación tocada y `cd web && npm run build:pistea` (la versión **sin marcas** de las estaciones: ni logotipos, ni iconos, ni tipografías, ni fotos oficiales; no uses `npm run build` para Pistea).
   2. Copiar `web/dist/app` a `mapas/` (en Windows, `robocopy <dist/app> <pistea/mapas> /MIR`).
   3. Aquí: `python scripts/gen_invierno.py`, `node scripts/gen_seguimiento.js`, `node scripts/gen_dificultad.js` y `node scripts/gen_pistas.js`.
   4. `npm test` y `node scripts/banco_seguimiento.js 12`.
