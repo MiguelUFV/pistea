@@ -3,7 +3,7 @@
 'use strict';
 const http = require('http'), https = require('https'), fs = require('fs'), path = require('path'), crypto = require('crypto'), zlib = require('zlib');
 const { promisify } = require('util'), { createClient } = require('@libsql/client'), { legal, LEGAL_HEADERS } = require('./legal');
-const { Calc, decodeTrace, fromPack, heights } = require('./public/calc.js'), GEO = require('./estaciones_geo.json');   // el mismo cálculo que la app; centro y radio de cada estación
+const { Calc, decodeTrace, fromPack, heights, toLocal } = require('./public/calc.js'), GEO = require('./estaciones_geo.json');   // el mismo cálculo que la app; centro y radio de cada estación
 const env = process.env, PORT = +env.PORT || 3000, PROD = env.NODE_ENV === 'production', VERCEL = !!env.VERCEL, TRUST = env.TRUST_PROXY === '1';
 const APP_URL = (env.APP_URL || (env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + env.VERCEL_PROJECT_PRODUCTION_URL : `http://localhost:${PORT}`)).replace(/\/$/, '');
 const DATA = env.DATA_DIR || __dirname, AVATARS_DIR = path.join(DATA, 'avatars');
@@ -56,7 +56,8 @@ const ALTERS = [['users', 'avatar TEXT'], ['users', 'age INTEGER'], ['users', 'b
   ['users', 'handle TEXT'], ['users', 'since INTEGER'], ['users', 'terrain TEXT'], ['users', 'wish TEXT'], ['users', 'goal_days INTEGER'], ['users', 'gear TEXT'], ['users', 'club TEXT'], ['users', 'onboarded INTEGER'],
   ['days', 'freeride REAL'], ['days', 'detail TEXT'],   // km fuera de pista y el desglose del día (bajadas con sus pistas, remontes, metros por color)
   ['users', 'approve INTEGER'], ['users', 'notif_seen INTEGER'], ['follows', 'ts INTEGER'],   // aprobar seguidores; hasta cuándo ha visto sus avisos; cuándo empezó a seguir
-  ['users', 'hidden INTEGER'], ['users', 'banned INTEGER']];   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
+  ['users', 'hidden INTEGER'], ['users', 'banned INTEGER'],
+  ['users', 'vis TEXT']];   // quién ve los días: todos, seguidores (por defecto, también si es NULL) o yo   // hidden: oculto por denuncias hasta revisarlo; banned: cuenta suspendida   // verified NULL = cuenta anterior a la verificación (se da por buena)
 const INDEXES = ['CREATE INDEX IF NOT EXISTS i_days_uid ON days(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_days_st ON days(station, ts)', 'CREATE INDEX IF NOT EXISTS i_days_ts ON days(ts)',
   'CREATE INDEX IF NOT EXISTS i_tokens_uid ON tokens(uid)', 'CREATE INDEX IF NOT EXISTS i_audit_uid ON audit_logs(uid, ts)', 'CREATE INDEX IF NOT EXISTS i_audit_ts ON audit_logs(ts)',
   'CREATE INDEX IF NOT EXISTS i_hits ON hits(k, ts)', 'CREATE INDEX IF NOT EXISTS i_follows_b ON follows(b)', 'CREATE INDEX IF NOT EXISTS i_kudos_uid ON kudos(uid)', 'CREATE INDEX IF NOT EXISTS i_blocks_b ON blocks(b)', 'CREATE INDEX IF NOT EXISTS i_reports ON reports(status, target)',
@@ -116,13 +117,37 @@ function stationOf(id) {
   PACKS.set(id, s); if (PACKS.size > 6) PACKS.delete(PACKS.keys().next().value);
   return s;
 }
+// El recorrido que se guarda y se enseña: sin lo de antes del primer remonte o bajada ni lo de después de la última (salir
+// del alojamiento, aparcar) y solo dentro del círculo de la estación (estaciones_geo.json). Puntos [x, z, clase]; clase 6 =
+// parado, andando o sin mapa. Para los días guardados antes del recorte se aplica al enseñarlos a otros
+const GEOLOC = new Map();
+function trimTrack(track, station) {
+  if (!Array.isArray(track) || !track.length) return [];
+  const isMove = p => Array.isArray(p) && (p.length < 3 || p[2] !== 6);
+  let a = 0, b = track.length - 1; while (a <= b && !isMove(track[a])) a++; while (b >= a && !isMove(track[b])) b--;
+  let out = track.slice(a, b + 1);
+  const g = GEO[station];
+  if (g && out.length && out[0].length >= 3) {
+    if (!GEOLOC.has(station)) { let c = null; try { const geo = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'seg', station + '.json'), 'utf8')).geo; c = geo ? toLocal(g.lat, g.lon, geo) : null; } catch {} GEOLOC.set(station, c); }
+    const c = GEOLOC.get(station), r = g.km * 1000; if (c) out = out.filter(p => Math.hypot(p[0] - c.x, p[1] - c.z) <= r);
+  }
+  return out.length >= 2 ? out : [];
+}
 const SRC = ALLOW_SIM ? '1=1' : "src!='sim'", SRC_D = ALLOW_SIM ? '1=1' : "d.src!='sim'";
 const pubCond = p => `${VERIFY ? `COALESCE(${p}verified,1)=1 AND ` : ''}COALESCE(${p}hidden,0)=0 AND COALESCE(${p}banned,0)=0`;   // ver VERIFY
 const pubU = () => pubCond('u.'), pubUid = c => `${c} IN (SELECT id FROM users WHERE ${pubCond('')})`;
 const notBlocked = c => `${c} NOT IN (SELECT b FROM blocks WHERE a=?) AND ${c} NOT IN (SELECT a FROM blocks WHERE b=?)`;   // en las dos direcciones
-const rankRows = (metric, st, period, limit = 10, self = '') => all(`SELECT d.uid uid, u.alias alias, u.avatar avatar, ${MX[metric]} v FROM days d JOIN users u ON u.id=d.uid WHERE d.ts>=? AND (? IS NULL OR d.station=?) AND ${SRC_D} AND (${pubU()} OR d.uid=?) GROUP BY d.uid ORDER BY v DESC, d.uid LIMIT ?`, [Date.now() - WIN[period], st, st, self, limit]);
+// Quién ve los días (recorrido, bajadas y remontes): «todos», «seguidores» (por defecto: privacidad desde el diseño, art. 25
+// RGPD) o «yo». Quien elige «yo» tampoco sale en los rankings ni en los récords de pista; los demás salen con sus totales
+const VIS = ['todos', 'seguidores', 'yo'], visOf = u => VIS.includes(u && u.vis) ? u.vis : 'seguidores';
+const V_ = p => `COALESCE(${p}vis,'seguidores')`;
+const listed = p => `${V_(p)}!='yo'`, listedUid = c => `${c} IN (SELECT id FROM users WHERE ${pubCond('')} AND ${listed('')})`;
+// Días de x.uid que puede ver quien mira (?): los suyos, los de «todos» y los de «seguidores» si les sigue
+const daysVisible = (p, uidCol) => `(${uidCol}=? OR ${V_(p)}='todos' OR (${V_(p)}='seguidores' AND ${uidCol} IN (SELECT b FROM follows WHERE a=?)))`;
+const canSeeDays = async (viewer, owner) => owner.id === viewer || visOf(owner) === 'todos' || (visOf(owner) === 'seguidores' && !!(await one('SELECT 1 x FROM follows WHERE a=? AND b=?', [viewer, owner.id])));
+const rankRows = (metric, st, period, limit = 10, self = '') => all(`SELECT d.uid uid, u.alias alias, u.avatar avatar, ${MX[metric]} v FROM days d JOIN users u ON u.id=d.uid WHERE d.ts>=? AND (? IS NULL OR d.station=?) AND ${SRC_D} AND ((${pubU()} AND ${listed('u.')}) OR d.uid=?) AND ${notBlocked('d.uid')} GROUP BY d.uid ORDER BY v DESC, d.uid LIMIT ?`, [Date.now() - WIN[period], st, st, self, self, self, limit]);   // sin cuentas «solo yo» ni bloqueos
 async function posOf(uid, metric, st, period) {
-  const r = await one(`WITH t AS (SELECT uid, ${MX[metric]} v FROM days WHERE ts>=? AND (? IS NULL OR station=?) AND ${SRC} AND (${pubUid('uid')} OR uid=?) GROUP BY uid)
+  const r = await one(`WITH t AS (SELECT uid, ${MX[metric]} v FROM days WHERE ts>=? AND (? IS NULL OR station=?) AND ${SRC} AND (${listedUid('uid')} OR uid=?) GROUP BY uid)
     SELECT (SELECT v FROM t WHERE uid=?) mine, (SELECT COUNT(*) FROM t WHERE v>(SELECT v FROM t WHERE uid=?))+1 pos, (SELECT COUNT(*) FROM t) total, (SELECT MIN(v) FROM t WHERE v>(SELECT v FROM t WHERE uid=?)) nxt`, [Date.now() - WIN[period], st, st, uid, uid, uid, uid]);
   return !r || r.mine == null ? null : { pos: r.pos, v: r.mine, total: r.total, gap: r.nxt == null ? 0 : r.nxt - r.mine };
 }
@@ -192,7 +217,7 @@ async function groupedPasses(sts, viewer, names) {
   let base = GP.get(ck);
   if (!base || Date.now() - base.t > GP_TTL) {
     const rows = await all(`SELECT p.station s, p.piste p, p.c c, p.uid uid, u.alias alias, u.avatar avatar, MAX(p.vmax) v, SUM(p.n) n, MIN(p.ts) t FROM passes p JOIN users u ON u.id=p.uid
-      WHERE ${where} AND ${pubU()} GROUP BY p.station, p.piste, p.uid`, args);
+      WHERE ${where} AND ${pubU()} AND ${listed('u.')} GROUP BY p.station, p.piste, p.uid`, args);
     base = { t: Date.now(), rows }; GP.set(ck, base); if (GP.size > 200) GP.delete(GP.keys().next().value);
   }
   const [mine, blk] = await Promise.all([
@@ -285,7 +310,7 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 const normEmail = v => str(v, 254).trim().toLowerCase();
 const safeAvatar = a => typeof a === 'string' && /^\/avatars\/[a-z0-9_.]+(\?v=\d+)?$/.test(a) ? a : null;
 const clean = u => ({ id: u.id, alias: u.alias, email: u.email, avatar: safeAvatar(u.avatar), age: u.age || null, bio: u.bio || '', station_home: u.station_home || null, modality: u.modality || 'ski', level: u.level || 'intermedio', terms_accepted_at: u.terms_accepted_at || null, created: u.created || null, verified: u.verified === null || u.verified === undefined ? !ADMINS.has(u.email) : !!u.verified, admin: isAdmin(u) || undefined,   // un administrador sin verificar ve el aviso para confirmar su correo
-  ...card(u), goal_days: u.goal_days || null, onboarded: !!u.onboarded, approve: !!u.approve });
+  ...card(u), goal_days: u.goal_days || null, onboarded: !!u.onboarded, approve: !!u.approve, vis: visOf(u) });
 // Lo público de la ficha de esquiador (el reto de días es solo para uno mismo)
 const card = u => ({ handle: u.handle || null, since: u.since || null, terrain: J(u.terrain), wish: J(u.wish), gear: u.gear || '', club: u.club || '' });
 // @usuario: 3 a 20 letras minúsculas, cifras, punto o guion bajo, empezando y acabando en letra o cifra. Los nombres de la
@@ -503,6 +528,14 @@ const routes = {
     }
     for (const k of ['gear', 'club']) if (b[k] !== undefined) { const v = text(b[k], 60); if (offensive(v)) return send(res, 400, { error: k === 'gear' ? 'El equipo tiene palabras que no están permitidas.' : 'El club tiene palabras que no están permitidas.' }); updates.push(k + '=?'); params.push(v); audited.push(k); }
     if (b.approve !== undefined) { if (typeof b.approve !== 'boolean') return send(res, 400, { error: 'Valor no válido.' }); updates.push('approve=?'); params.push(b.approve ? 1 : 0); audited.push('approve'); }
+    {   // quién ve los días; un menor de 18 (por la edad que haya dado) no puede enseñarlos a todos
+      const ageNow = b.age !== undefined ? (b.age === null || b.age === '' ? null : parseInt(b.age, 10)) : u.age, minor = Number.isFinite(ageNow) && ageNow < 18;
+      if (b.vis !== undefined) {
+        if (!VIS.includes(b.vis)) return send(res, 400, { error: 'Valor no válido.' });
+        if (b.vis === 'todos' && minor) return send(res, 400, { error: 'Con menos de 18 años, tus días solo los pueden ver tus seguidores.' });
+        updates.push('vis=?'); params.push(b.vis); audited.push('vis');
+      } else if (minor && visOf(u) === 'todos') { updates.push('vis=?'); params.push('seguidores'); audited.push('vis'); }
+    }
     if (b.onboarded === true) updates.push('onboarded=1');
     if (!updates.length) return send(res, 400, { error: 'No hay campos que actualizar.' });
     updates.push('updated_at=?'); params.push(Date.now(), u.id);
@@ -585,7 +618,7 @@ const routes = {
       }
     }
     // Puesto entre coleccionistas: lo de los demás (cuentas públicas) se guarda un minuto; lo propio, al momento
-    if (!COLL.v || Date.now() - COLL.t > MIN) COLL.v = (await all(`SELECT uid, COUNT(DISTINCT station||'|'||piste) v FROM passes WHERE ${pubUid('uid')} GROUP BY uid`)), COLL.t = Date.now();
+    if (!COLL.v || Date.now() - COLL.t > MIN) COLL.v = (await all(`SELECT uid, COUNT(DISTINCT station||'|'||piste) v FROM passes WHERE ${listedUid('uid')} GROUP BY uid`)), COLL.t = Date.now();
     const mineN = rows.length, others = COLL.v.filter(r => r.uid !== u.id);
     send(res, 200, { stations, crowns, rank: mineN ? { pos: others.filter(r => r.v > mineN).length + 1, total: others.length + 1 } : null });
   },
@@ -647,21 +680,22 @@ const routes = {
       fav: fav && { station: fav.s, name: fav.p, c: fav.c, n: fav.n }, fast: fastP && { station: fastP.s, name: fastP.p, c: fastP.c, v: Math.round(fastP.v), ...fastRank },
       pos: pos ? { pos: pos.pos, total: pos.total } : null, first: days[0].ts, last: days[days.length - 1].ts });
   },
-  'GET /api/stations': async ({ res }) => {
+  'GET /api/stations': async ({ res, u }) => {
     if (Date.now() - stationsCache.t > MIN || !stationsCache.v) {
-      const cnt = Object.fromEntries((await all(`SELECT station s, COUNT(DISTINCT uid) n FROM days WHERE ts>=? AND ${SRC} AND ${pubUid('uid')} GROUP BY station`, [Date.now() - WIN.temporada])).map(r => [r.s, r.n]));
+      const cnt = Object.fromEntries((await all(`SELECT station s, COUNT(DISTINCT uid) n FROM days WHERE ts>=? AND ${SRC} AND ${listedUid('uid')} GROUP BY station`, [Date.now() - WIN.temporada])).map(r => [r.s, r.n]));
       const out = {};
-      await Promise.all(STATIONS.map(async ([id]) => { out[id] = { skiers: cnt[id] || 0, leaders: cnt[id] ? (await rankRows('desnivel', id, 'temporada', 3)).map(x => ({ alias: x.alias, v: x.v })) : [] }; }));
+      await Promise.all(STATIONS.map(async ([id]) => { out[id] = { skiers: cnt[id] || 0, leaders: cnt[id] ? (await rankRows('desnivel', id, 'temporada', 4)).map(x => ({ uid: x.uid, alias: x.alias, v: x.v })) : [] }; }));
       stationsCache = { t: Date.now(), v: out };
     }
-    send(res, 200, stationsCache.v);
+    const blk = new Set((await all('SELECT b x FROM blocks WHERE a=? UNION SELECT a x FROM blocks WHERE b=?', [u.id, u.id])).map(r => r.x));
+    send(res, 200, Object.fromEntries(Object.entries(stationsCache.v).map(([id, o]) => [id, { skiers: o.skiers, leaders: o.leaders.filter(x => !blk.has(x.uid)).slice(0, 3).map(x => ({ alias: x.alias, v: x.v })) }])));
   },
   'GET /api/feed': async ({ res, u, q }) => {
     const onlyF = q.get('scope') === 'amigos' ? 1 : 0;
     const rows = await all(`SELECT d.id id, d.uid uid, d.station station, d.ts ts, d.desnivel desnivel, d.km km, d.bajadas bajadas, d.vmax vmax, d.freeride freeride, d.track track, u.alias alias, u.avatar avatar,
       (SELECT COUNT(*) FROM kudos k WHERE k.day=d.id) kudos, EXISTS(SELECT 1 FROM kudos k WHERE k.day=d.id AND k.uid=?) liked
-      FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${pubU()} OR d.uid=?) AND ${notBlocked('d.uid')} AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, u.id, u.id, onlyF, u.id, u.id]);
-    send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: J(d.track), liked: !!d.liked })));
+      FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${pubU()} OR d.uid=?) AND ${notBlocked('d.uid')} AND ${daysVisible('u.', 'd.uid')} AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, u.id, u.id, u.id, u.id, onlyF, u.id, u.id]);
+    send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: d.uid === u.id ? J(d.track) : trimTrack(J(d.track), d.station), liked: !!d.liked })));
   },
   'POST /api/days': async ({ res, u, b }) => {
     const c = b.col && typeof b.col === 'object' ? b.col : {}, src = b.source === 'sim' ? 'sim' : 'gps';
@@ -672,9 +706,12 @@ const routes = {
     if (await limited('dy:' + u.id, 30, HOUR)) return send(res, 429, { error: 'Demasiados intentos de guardar. Inténtalo dentro de un rato.' });
     let t0 = null, t1 = null;
     if (src === 'gps') {
+      // Repetido: se mira con las horas de la traza antes de recalcularla (decodificar es barato; el motor, no)
+      let fx = null; try { fx = decodeTrace(b.trace); } catch {}
+      if (fx && fx.length && await one('SELECT 1 x FROM days WHERE uid=? AND t1>? AND t0<?', [u.id, fx[0].t, fx[fx.length - 1].t])) return send(res, 409, { error: 'Ese día ya está guardado.' });
       const v = checkTrace(b.trace, b.station); if (v.error) return send(res, 400, { error: v.error });
       Object.assign(b, v.p, { total: (v.t1 - v.t0) / HOUR }); t0 = v.t0; t1 = v.t1;   // lo que mande el móvil se sustituye por lo calculado aquí
-      if (await one('SELECT 1 x FROM days WHERE uid=? AND t1>? AND t0<?', [u.id, t0, t1])) return send(res, 409, { error: 'Ese día ya está guardado.' });
+      b.track = trimTrack(b.track, b.station);   // sin el camino desde el alojamiento ni lo de fuera de la estación
     }
     // Con GPS, el recorrido y el desglose son los del motor aquí (de fiar); en la simulación (solo en desarrollo), lo que mande
     const gps = src === 'gps';
@@ -693,10 +730,14 @@ const routes = {
     send(res, 200, { day: d, before: (before || {}).pos || 0, after: (after || {}).pos || 0, posStation: (ps || {}).pos || 0, nov });
   },
   'GET /api/day': async ({ res, u, q }) => {   // un día con todo su desglose: el propio o el de alguien visible
-    const d = await one(`SELECT d.*, u.alias alias, u.verified verified, u.hidden hidden, u.banned banned FROM days d JOIN users u ON u.id=d.uid WHERE d.id=?`, [str(q.get('id'), 40)]);
-    if (!d || (d.uid !== u.id && ((VERIFY && d.verified === 0) || d.hidden || d.banned || await blockedEither(u.id, d.uid)))) return send(res, 404, { error: 'Ese día no existe.' });
-    send(res, 200, { id: d.id, uid: d.uid, alias: d.alias, station: d.station, ts: d.ts, t0: d.t0, t1: d.t1, desnivel: d.desnivel, km: d.km, horas: d.horas, bajadas: d.bajadas, vmax: d.vmax, vmed: d.vmed, total: d.total,
-      freeride: d.freeride || 0, col: J(d.col, {}), track: J(d.track), speed: J(d.speed), detail: J(d.detail, null), me: d.uid === u.id });
+    const d = await one(`SELECT d.*, u.alias alias, u.verified verified, u.hidden hidden, u.banned banned, u.vis vis FROM days d JOIN users u ON u.id=d.uid WHERE d.id=?`, [str(q.get('id'), 40)]);
+    const me = !!d && d.uid === u.id;
+    if (!d || (!me && ((VERIFY && d.verified === 0) || d.hidden || d.banned || await blockedEither(u.id, d.uid) || !(await canSeeDays(u.id, { id: d.uid, vis: d.vis }))))) return send(res, 404, { error: 'Ese día no existe.' });
+    // A los demás, sin la hora de cada bajada ni de cada remonte, y con el recorrido recortado a la estación
+    let detail = J(d.detail, null);
+    if (!me && detail) detail = { ...detail, runs: (detail.runs || []).map(r => [null, null, ...r.slice(2)]), rides: (detail.rides || []).map(r => [r[0], null, null, ...r.slice(3)]) };
+    send(res, 200, { id: d.id, uid: d.uid, alias: d.alias, station: d.station, ts: d.ts, t0: me ? d.t0 : null, t1: me ? d.t1 : null, desnivel: d.desnivel, km: d.km, horas: d.horas, bajadas: d.bajadas, vmax: d.vmax, vmed: d.vmed, total: d.total,
+      freeride: d.freeride || 0, col: J(d.col, {}), track: me ? J(d.track) : trimTrack(J(d.track), d.station), speed: J(d.speed), detail, me });
   },
   'GET /api/handle': async ({ res, u, q }) => {   // ¿está libre este @usuario? Si no, propone uno parecido que sí lo esté
     if (await limited('hd:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
@@ -718,7 +759,7 @@ const routes = {
     const [back, fof, home] = await Promise.all([
       all('SELECT a id FROM follows WHERE b=? ORDER BY COALESCE(ts,0) DESC LIMIT 30', [u.id]),
       all('SELECT f2.b id, COUNT(*) n FROM follows f1 JOIN follows f2 ON f2.a=f1.b WHERE f1.a=? AND f2.b!=? GROUP BY f2.b ORDER BY n DESC LIMIT 30', [u.id, u.id]),
-      u.station_home ? all('SELECT id FROM users WHERE station_home=? AND id!=? ORDER BY (SELECT COUNT(*) FROM days WHERE uid=users.id) DESC LIMIT 30', [u.station_home, u.id]) : []]);
+      u.station_home ? all('SELECT id FROM users WHERE station_home=? AND id!=? AND (age IS NULL OR age>=18) ORDER BY (SELECT COUNT(*) FROM days WHERE uid=users.id) DESC LIMIT 30', [u.station_home, u.id]) : []]);
     const why = new Map(), add = (id, score, txt) => { const w = why.get(id) || { score: 0, txt: [] }; w.score += score; if (txt) w.txt.push(txt); why.set(id, w); };
     back.forEach(r => add(r.id, 100, 'Te sigue'));
     fof.forEach(r => add(r.id, 10 * r.n, `${r.n} ${r.n === 1 ? 'amigo' : 'amigos'} en común`));
@@ -788,19 +829,21 @@ const routes = {
     send(res, 200, { following: true, requested: false });
   },
   'GET /api/user': async ({ res, u, q }) => {
-    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned, handle, since, terrain, wish, gear, club, approve FROM users WHERE id=?', [str(q.get('id'), 40)]);
+    const t = await one('SELECT id, alias, avatar, age, bio, station_home, modality, level, created, verified, hidden, banned, handle, since, terrain, wish, gear, club, approve, vis FROM users WHERE id=?', [str(q.get('id'), 40)]);
     if (!t || (t.id !== u.id && ((VERIFY && t.verified === 0) || t.hidden || t.banned || await blockedEither(u.id, t.id)))) return send(res, 404, { error: 'No existe.' });
     const me = t.id === u.id;
     const [totals, stations, days, pos, stk, followers, following, followingN, followsMe, requested] = await Promise.all([agg(t.id), stationsDistinct(t.id), all('SELECT id, station, ts, desnivel, bajadas, freeride, track FROM days WHERE uid=? ORDER BY ts DESC LIMIT 5', [t.id]),
       posOf(t.id, 'desnivel', null, 'temporada'), streak(t.id), count('SELECT COUNT(*) n FROM follows WHERE b=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [u.id, t.id]),
       count('SELECT COUNT(*) n FROM follows WHERE a=?', [t.id]), one('SELECT 1 x FROM follows WHERE a=? AND b=?', [t.id, u.id]), one('SELECT 1 x FROM follow_requests WHERE a=? AND b=?', [u.id, t.id])]);
     delete t.verified; delete t.hidden; delete t.banned;
-    send(res, 200, { ...t, ...card(t), age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals, stations, days: days.map(d => ({ ...d, track: J(d.track) })), pos: (pos || {}).pos || 0, streak: stk, followers, followingN, following: !!following, followsMe: !!followsMe, requested: !!requested, approve: !!t.approve, canList: me || !t.approve || !!following, me });   // la edad es privada
+    // Sus días y sus estaciones, solo si los puede ver quien mira; con «solo yo», tampoco sus totales
+    const vis = visOf(t), see = me || vis === 'todos' || (vis === 'seguidores' && !!following);
+    send(res, 200, { ...t, ...card(t), vis, daysHidden: !see, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals: see || vis !== 'yo' ? totals : null, stations: see ? stations : [], days: see ? days.map(d => ({ ...d, track: me ? J(d.track) : trimTrack(J(d.track), d.station) })) : [], pos: see || vis !== 'yo' ? (pos || {}).pos || 0 : 0, streak: see ? stk : 0, followers, followingN, following: !!following, followsMe: !!followsMe, requested: !!requested, approve: !!t.approve, canList: me || !t.approve || !!following, me });   // la edad es privada
   },
   'POST /api/kudos': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });
     // Solo días que se pueden ver: de cuentas públicas (ni ocultas ni suspendidas ni sin verificar) y sin bloqueos
-    const id = str(b.id, 40), dd = await one(`SELECT d.uid uid FROM days d JOIN users u ON u.id=d.uid WHERE d.id=? AND ${pubU()}`, [id]); if (!dd || await blockedEither(u.id, dd.uid)) return send(res, 404, { error: 'No existe.' });
+    const id = str(b.id, 40), dd = await one(`SELECT d.uid uid, u.vis vis FROM days d JOIN users u ON u.id=d.uid WHERE d.id=? AND ${pubU()}`, [id]); if (!dd || await blockedEither(u.id, dd.uid) || !(await canSeeDays(u.id, { id: dd.uid, vis: dd.vis }))) return send(res, 404, { error: 'No existe.' });
     if (dd.uid === u.id) return send(res, 400, { error: 'No puedes dar apoyo a tus propios días.' });
     const had = (await run('DELETE FROM kudos WHERE day=? AND uid=?', [id, u.id])).rowsAffected;
     if (!had) { await run('INSERT OR IGNORE INTO kudos(day,uid) VALUES(?,?)', [id, u.id]); await notify(dd.uid, 'kudo', u.id, id); } else await unnotify(dd.uid, 'kudo', u.id, id);

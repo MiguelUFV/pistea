@@ -201,9 +201,24 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('la edad no sale en el perfil público', s === 200 && j.age === null && j.alias === 'Ana Test', s + ' ' + JSON.stringify(j).slice(0, 200));
   t('perfil con XSS en el nombre se limpia', (await A('POST', '/api/me', { alias: 'Ana‮<b>' }))[1].user?.alias === 'Ana <b>');
   [s, j] = await A('GET', '/api/me'); const dayId = j.days[0].id;
+  // --- quién ve los días: por defecto, solo los seguidores (privacidad desde el diseño)
+  t('por defecto, los días los ven tus seguidores', j.user.vis === 'seguidores');
+  t('quien no te sigue no ve tus días…', (await V('GET', '/api/day?id=' + dayId))[0] === 404 && (await V('GET', '/api/user?id=' + j.user.id))[1].daysHidden === true && !(await V('GET', '/api/feed?scope=todos'))[1].some(d => d.id === dayId));
+  t('…ni les da apoyo', (await V('POST', '/api/kudos', { id: dayId }))[0] === 404);
+  t('valor de privacidad raro', (await A('POST', '/api/me', { vis: 'publico' }))[0] === 400);
+  await A('POST', '/api/me', { vis: 'todos' });
+  [s, j] = await V('GET', '/api/day?id=' + dayId);
+  t('con «todos», sí, pero sin la hora del día', s === 200 && j.t0 === null && j.t1 === null && j.me === false, JSON.stringify(j).slice(0, 160));
   t('sin apoyo a un día propio', (await A('POST', '/api/kudos', { id: dayId }))[0] === 400);
   t('kudos +', (await V('POST', '/api/kudos', { id: dayId }))[1].liked === true);
   t('kudos -', (await V('POST', '/api/kudos', { id: dayId }))[1].liked === false);
+  await A('POST', '/api/me', { vis: 'yo' });
+  t('«solo yo»: fuera de los rankings de los demás…', !(await V('GET', '/api/rank?metric=desnivel&period=temporada'))[1].rows.some(r => /^Ana/.test(r.alias)) && (await V('GET', '/api/user?id=' + (await A('GET', '/api/me'))[1].user.id))[1].totals === null);
+  t('…pero ve su propio puesto', (await A('GET', '/api/rank?metric=desnivel&period=temporada'))[1].me?.pos > 0);
+  await A('POST', '/api/me', { vis: 'seguidores' });
+  await V('POST', '/api/me', { age: 16 });
+  t('con menos de 18 años, los días no pueden ser de todos', (await V('POST', '/api/me', { vis: 'todos' }))[0] === 400);
+  await V('POST', '/api/me', { age: null });
   // --- foto de perfil en la BD
   const png = 'data:image/png;base64,' + Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), Buffer.alloc(64, 1)]).toString('base64');
   [s, j] = await A('POST', '/api/avatar', { image: png }); t('subir foto', s === 200 && /^\/avatars\/[a-f0-9]{16}\?v=\d+$/.test(j.avatar), JSON.stringify(j));
@@ -348,6 +363,7 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('bloquear borra la solicitud y los avisos entre los dos', (await Q('POST', '/api/block', { id: P.id }))[1].blocked === true && (await Q('GET', '/api/requests'))[1].length === 0 && (await db.execute({ sql: 'SELECT COUNT(*) n FROM follow_requests WHERE (a=? AND b=?) OR (a=? AND b=?)', args: [P.id, Q.id, Q.id, P.id] })).rows[0].n === 0);
   t('el bloqueado no puede pedir seguir', (await P('POST', '/api/follow', { id: Q.id }))[0] === 400);
   await Q('POST', '/api/block', { id: P.id });
+  await W('POST', '/api/me', { vis: 'todos' });
   const wd = (await W('POST', '/api/days', day()))[1].day.id;
   t('apoyo a un día: avisa a su dueña', (await P('POST', '/api/kudos', { id: wd }))[1].liked === true && (await W('GET', '/api/activity'))[1].items.some(x => x.kind === 'kudo' && x.day === wd && x.station === 'valdesqui' && x.alias === 'Pau Pública'));
   await P('POST', '/api/kudos', { id: wd });
