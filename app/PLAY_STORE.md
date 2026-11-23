@@ -8,7 +8,7 @@ Material listo en `app/store/`:
 App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (versión 1.0.0, versionCode 1, carga https://pistea.vercel.app).
 
 > **Antes de subir nada, lee `LEGAL.md` (23-nov-2026).** Hay que resolver tres cosas que Google mira:
-> - El aviso «Hay una versión nueva», que descarga una APK fuera de Play, debe quedar desactivado en la versión de Play (L3).
+> - El aviso «Hay una versión nueva», que descarga una APK fuera de Play, no debe salir en la versión de Play (L3). Ya está resuelto: compila con `PISTEA_CANAL=play` (apartado 4).
 > - La velocidad no puede ser una competición (L2).
 > - Los días deben ser privados por defecto (L1).
 
@@ -70,7 +70,7 @@ App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (ver
 
 ## 4. Publicar una versión
 1. Sube `versionCode` en `app/android/app/build.gradle` (+1 cada vez) y `versionName`.
-2. `cd app` · `PISTEA_URL=https://pistea.vercel.app node sync.js` · `cd android` · `gradlew bundleRelease`.
+2. `cd app` · `PISTEA_CANAL=play PISTEA_URL=https://pistea.vercel.app node sync.js` · `cd android` · `gradlew bundleRelease`. **`PISTEA_CANAL=play` es obligatorio**: así la app no enseña el aviso «Hay una versión nueva» (descarga una APK fuera de Play), que Google prohíbe. La APK que se reparte por el enlace `/android` se hace sin esa variable.
 3. Sube `app-release.aab` en Play Console → Prueba cerrada (o Producción cuando Google lo permita).
 
 La web se actualiza sola al subir a GitHub (Vercel está conectado a `main`). La app carga la web, así que casi todos los cambios no necesitan una versión nueva en Google Play. Solo hacen falta si cambia algo de Android: permisos, grabador GPS o iconos.
