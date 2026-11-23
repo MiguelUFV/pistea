@@ -1,0 +1,6 @@
+# Cloudflare Pages (Pistea). Lo que lleva hash en el nombre no cambia nunca; los datos de cada estación sí pueden cambiar al
+# republicarla, así que se guardan unas horas y la vista se refresca con la siguiente visita
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/estaciones/*
+  Cache-Control: public, max-age=21600, stale-while-revalidate=86400

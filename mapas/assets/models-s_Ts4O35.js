@@ -1,4 +1,4 @@
-import{f as Mi,B as Nc}from"./_virtual_ficha-9WYUGsQw.js";/**
+import{f as Mi,B as Nc}from"./_virtual_ficha-BRg1F4Mj.js";/**
  * @license
  * Copyright 2010-2024 Three.js Authors
  * SPDX-License-Identifier: MIT

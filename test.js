@@ -306,7 +306,7 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   const csp = r.headers.get('content-security-policy'), page = await r.text();
   const scriptSrc = (csp.match(/script-src([^;]*)/) || [])[1] || '';
   t('CSP estricta: sin código inline', scriptSrc.trim() === "'self'" && !/<script>/.test(page) && !/\son(click|submit|input|change)=/.test(page));
-  r = await fetch(B + '/app.js'); t('app.js servido y revalidado', r.status === 200 && r.headers.get('cache-control') === 'no-cache' && /text\/javascript/.test(r.headers.get('content-type')));
+  r = await fetch(B + '/app.js'); t('app.js servido y revalidado', r.status === 200 && /^public, max-age=0, s-maxage=\d+, must-revalidate$/.test(r.headers.get('cache-control')) && /text\/javascript/.test(r.headers.get('content-type')));
   t('app.js sin manejadores inline', !/\son(click|submit|input|change)="/.test(await r.text()));
   r = await fetch(B + '/3d/'); t('mapas 3D servidos', r.status === 200 && /html/.test(r.headers.get('content-type')), r.status);
   r = await fetch(B + '/api/config'); t('sin MAPS_URL, el 3D lo sirve este servidor', (await r.json()).maps === '/3d/');

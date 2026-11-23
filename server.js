@@ -286,7 +286,11 @@ async function authUser(req, res) {
   else if (!cookies(req)[COOKIE]) setSession(req, res, t);   // venía del token antiguo en localStorage: pasa a cookie
   return u;
 }
-const send = (res, code, o) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+const send = (res, code, o) => {
+  const body = Buffer.from(JSON.stringify(o)), h = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
+  if (body.length > 1500 && /\bgzip\b/.test(String(res.req && res.req.headers['accept-encoding'] || ''))) { const z = zlib.gzipSync(body, { level: 5 }); res.writeHead(code, { ...h, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding', 'Content-Length': z.length }); return res.end(z); }   // listas largas (clasificaciones, días): 5-10 veces menos
+  res.writeHead(code, { ...h, 'Content-Length': body.length }); res.end(body);
+};
 function readBody(req, max) {
   if (+req.headers['content-length'] > max) return Promise.reject(new Error('big'));
   if (VERCEL && req.body !== undefined) return Promise.resolve(req.body && typeof req.body === 'object' ? req.body : J(req.body, {}));   // Vercel ya lo ha leído
@@ -325,7 +329,15 @@ const handleOf = v => str(v, 40).trim().toLowerCase().replace(/^@/, '');
 const audit = (uid, action, req, details = {}) => run('INSERT INTO audit_logs(id,uid,action,ip,ua,details,ts) VALUES(?,?,?,?,?,?,?)', [rid(), uid || null, action, ipOf(req), str(req.headers['user-agent'], 200), JSON.stringify(details), Date.now()]).catch(e => console.error('[auditoría]', e.message));
 
 // ---------- contraseñas: scrypt (N=32768) con sal propia; los hashes antiguos (N=16384) se renuevan al entrar ----------
-const scrypt = promisify(crypto.scrypt), KDF = { N: 32768, r: 8, p: 1, maxmem: 96 * 1024 * 1024 };
+const scryptRaw = promisify(crypto.scrypt), KDF = { N: 32768, r: 8, p: 1, maxmem: 96 * 1024 * 1024 };
+// scrypt cuesta ~100 ms de CPU y usa los hilos del proceso, los mismos que el resto. Con una oleada de altas o accesos (un
+// lanzamiento, un enlace viral) se limita cuántas hacen a la vez y las demás esperan en cola; si la cola se alarga demasiado se
+// pide volver a intentarlo en vez de tener a todo el mundo esperando minutos (el cliente ve 503 con un mensaje claro)
+const KDF_MAX = +env.KDF_CONCURRENCY || 3, KDF_QUEUE = 60; let kdfRun = 0; const kdfWait = [];
+async function scrypt(...a) {
+  if (kdfRun >= KDF_MAX) { if (kdfWait.length >= KDF_QUEUE) { const e = new Error('busy'); e.busy = true; throw e; } await new Promise(r => kdfWait.push(r)); } else kdfRun++;
+  try { return await scryptRaw(...a); } finally { const n = kdfWait.shift(); if (n) n(); else kdfRun--; }
+}
 const hashPw = async pw => { const salt = crypto.randomBytes(16).toString('hex'); return { salt, hash: 's2$' + (await scrypt(pw.normalize('NFKC'), salt, 64, KDF)).toString('hex') }; };
 async function checkPw(pw, u) {
   if (!u) { await scrypt('x', 'pistea-sal-falsa', 64, KDF); return false; }   // mismo tiempo exista o no el correo
@@ -960,23 +972,42 @@ const routes = {
     await audit(u.id, 'ADMIN_PANEL', req, { users: out.length });
     send(res, 200, { now: Date.now(), users: out, days: days.map(d => [d.uid, d.station, d.ts, d.desnivel, d.km, d.bajadas, d.vmax, d.freeride, d.src]), reports: open, stations: Object.fromEntries(STATIONS.map(s => [s[0], s[1]])) });
   },
-  'GET /api/config': async ({ res }) => send(res, 200, { stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK, captcha: CAPTCHA ? env.TURNSTILE_SITE_KEY : null })
+  'GET /api/config': async ({ res }) => { res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300'); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' }); res.end(JSON.stringify({ stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK, captcha: CAPTCHA ? env.TURNSTILE_SITE_KEY : null })); }
 };
 
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.wasm': 'application/wasm', '.txt': 'text/plain; charset=utf-8' };
 const TEXTY = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg']);
+// Lo que se sirve a todos por igual (la página, app.js, calc.js, fichas de estación) no se vuelve a leer ni a comprimir en cada
+// petición: se guarda en memoria por fichero y fecha, ya comprimido. Además lleva s-maxage para que el CDN de Vercel
+// responda sin despertar la función (cada despliegue tiene su propia caché, así que nunca queda una versión vieja)
+const FILES = new Map(), FILES_MAX = 120;
+function textFile(f, s) {
+  const k = f + '|' + s.mtimeMs + '|' + s.size; let e = FILES.get(k);
+  if (!e) { const raw = fs.readFileSync(f); e = { raw, gz: zlib.gzipSync(raw, { level: 9 }), br: zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } }), tag: '"' + crypto.createHash('sha1').update(raw).digest('base64url').slice(0, 20) + '"' };
+    if (FILES.size >= FILES_MAX) FILES.delete(FILES.keys().next().value); FILES.set(k, e); }
+  return e;
+}
 function serveFile(req, res, root, rel, cache) {
   let p; try { p = decodeURIComponent(rel); } catch { res.writeHead(400); return res.end(); }
   if (p.includes('\0')) { res.writeHead(400); return res.end(); }
   let f = path.resolve(root, '.' + path.sep + p.replace(/^\/+/, ''));
   if (f !== root && !f.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }   // nunca fuera de la carpeta
   let s; try { s = fs.statSync(f); if (s.isDirectory()) { f = path.join(f, 'index.html'); s = fs.statSync(f); } } catch { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('No encontrado'); }
-  const ext = path.extname(f).toLowerCase(), lm = s.mtime.toUTCString();
-  const h = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Last-Modified': lm, 'Cache-Control': cache || (/\/assets\//.test(f.replace(/\\/g, '/')) ? 'public, max-age=31536000, immutable' : ext === '.html' ? 'no-cache' : 'public, max-age=3600'), 'X-Content-Type-Options': 'nosniff' };
+  const ext = path.extname(f).toLowerCase(), lm = s.mtime.toUTCString(), fix = f.replace(/\\/g, '/');
+  let cc = cache || (/\/assets\//.test(fix) ? 'public, max-age=31536000, immutable' : ext === '.html' ? 'no-cache' : 'public, max-age=3600');
+  if (cc === 'no-cache') cc = 'public, max-age=0, s-maxage=60, must-revalidate';      // se revalida siempre en el navegador; el CDN la guarda unos minutos
+  else if (/^public, max-age=3600$/.test(cc)) cc = 'public, max-age=3600, s-maxage=86400';
+  const h = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Last-Modified': lm, 'Cache-Control': cc, 'X-Content-Type-Options': 'nosniff' };
   if (ext === '.html') h['X-Frame-Options'] = 'SAMEORIGIN';
+  const ae = String(req.headers['accept-encoding'] || '');
+  if (TEXTY.has(ext) && s.size < 3e6) {
+    const e = textFile(f, s), enc = /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gzip' : '', body = enc === 'br' ? e.br : enc ? e.gz : e.raw;
+    Object.assign(h, { ETag: e.tag, Vary: 'Accept-Encoding' }); if (enc) h['Content-Encoding'] = enc;
+    if (req.headers['if-none-match'] === e.tag) { res.writeHead(304, h); return res.end(); }
+    res.writeHead(200, { ...h, 'Content-Length': body.length }); return res.end(body);
+  }
   if (req.headers['if-modified-since'] === lm) { res.writeHead(304, h); return res.end(); }
-  if (TEXTY.has(ext) && /\bgzip\b/.test(req.headers['accept-encoding'] || '')) { res.writeHead(200, { ...h, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' }); return fs.createReadStream(f).pipe(zlib.createGzip()).pipe(res); }
   res.writeHead(200, { ...h, 'Content-Length': s.size }); fs.createReadStream(f).pipe(res);
 }
 const IMG_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' };
@@ -1033,8 +1064,12 @@ async function handler(req, res) {
     const lp = /^\/(privacidad|condiciones|normas|borrar-cuenta|aviso-legal|licencias)\/?$/.exec(url.pathname);
     if (lp) { res.writeHead(200, LEGAL_HEADERS); return res.end(legal(lp[1], env)); }
     if (url.pathname === '/healthz') { if (DB_ERR) return send(res, 503, { ok: false }); await dbReady(); await run('SELECT 1'); return send(res, 200, { ok: true }); }
-    res.writeHead(200, PAGE_HEADERS); res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
+    const ix = path.join(__dirname, 'public', 'index.html'), is = fs.statSync(ix), e = textFile(ix, is), ae = String(req.headers['accept-encoding'] || ''), enc = /\bbr\b/.test(ae) ? 'br' : /\bgzip\b/.test(ae) ? 'gzip' : '';
+    const ph = { ...PAGE_HEADERS, 'Cache-Control': 'public, max-age=0, s-maxage=60, must-revalidate', ETag: e.tag, Vary: 'Accept-Encoding' }; if (enc) ph['Content-Encoding'] = enc;
+    if (req.headers['if-none-match'] === e.tag) { res.writeHead(304, ph); return res.end(); }
+    const body = enc === 'br' ? e.br : enc ? e.gz : e.raw; res.writeHead(200, { ...ph, 'Content-Length': body.length }); res.end(body);
   } catch (e) {
+    if (e.busy) { res.setHeader('Retry-After', '10'); return send(res, 503, { error: 'Hay muchísima gente entrando ahora mismo. Inténtalo de nuevo en unos segundos.' }); }
     const client = e.message === 'big' || e instanceof SyntaxError;
     if (!client) console.error('[error]', e);   // al cliente nunca le llega el detalle interno
     if (!res.headersSent) send(res, e.message === 'big' ? 413 : client ? 400 : 500, { error: e.message === 'big' ? 'Petición demasiado grande.' : client ? 'Petición no válida.' : 'Error del servidor. Inténtalo de nuevo.' }); else res.end();
