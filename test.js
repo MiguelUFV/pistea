@@ -146,6 +146,8 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('quitar el día denunciado', (await M('POST', '/api/admin/resolve', { id: dayRep.id, action: 'quitar_dia' }))[0] === 200 && !(await Bx('GET', '/api/me'))[1].days.some(d => d.id === beaDay));
   t('descartar: vuelve a ser visible', (await M('POST', '/api/admin/resolve', { id: other1.id, action: 'descartar' }))[0] === 200 && (await A('GET', '/api/users?q=bea'))[1].length === 1);
   t('no quedan denuncias abiertas', (await M('GET', '/api/admin/reports'))[1].length === 0);
+  t('al afectado le llegan la medida y el motivo (DSA)', /para bea@pistea\.es · Tu cuenta de Pistea está oculta/.test(out) && /para bea@pistea\.es · Hemos quitado uno de tus días/.test(out) && /para bea@pistea\.es · Tu cuenta de Pistea vuelve a verse/.test(out));
+  t('a quien denunció le llega la decisión', /para ana@pistea\.es · Hemos revisado tu denuncia/.test(out));
   // Denuncias en grupo: dos cuentas recién creadas y sin verificar, más una real, no bastan para esconder a nadie
   await R1('POST', '/api/report', { target: anaId, reason: 'spam' });
   for (const em of ['u1@spam.es', 'u2@spam.es']) { const U = browser(); await U('POST', '/api/register', { ...REG, email: em, alias: 'Spam ' + em[1] }); await U('POST', '/api/report', { target: anaId, reason: 'spam' }); }
@@ -314,6 +316,13 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
     t('página legal ' + p, r.status === 200 && html.includes(h) && (p === '/normas' || html.includes('legal@pistea.es')) && (!['/privacidad', '/condiciones'].includes(p) || html.includes('Persona De Prueba')) && !html.includes('[falta') && /default-src 'none'/.test(r.headers.get('content-security-policy')));
   }
   t('privacidad cita encargados y AEPD', /Turso/.test(await (await fetch(B + '/privacidad')).text()) );
+  const pv = await (await fetch(B + '/privacidad')).text();
+  t('privacidad: dice qué ven los demás y no promete lo que no es', pv.includes('Quién ve tus días') && pv.includes('Cloudflare') && pv.includes('Decisiones automáticas') && !pv.includes('sin coordenadas geográficas'));
+  const al = await fetch(B + '/aviso-legal'), alh = await al.text();
+  t('aviso legal con punto de contacto (y aviso si falta el NIF)', al.status === 200 && alh.includes('Punto de contacto') && alh.includes('[falta LEGAL_NIF') && alh.includes('no está vinculado'));
+  const lc = await (await fetch(B + '/licencias')).text();
+  t('créditos y licencias: ODbL, IGN, Sentinel y autores de las fotos', /ODbL/.test(lc) && /\/seg\/baqueira-beret\.json/.test(lc) && /IGN/.test(lc) && /Sentinel/.test(lc) && /CC BY-SA/.test(lc));
+  t('normas: denunciar sin cuenta y reclamar', /Sin cuenta/.test(await (await fetch(B + '/normas')).text()));
   t('salud con BD', (await (await fetch(B + '/healthz')).json()).ok === true);
   // --- parte social: solicitudes, listas, avisos, sugerencias
   await db.execute('DELETE FROM hits');   // el alta está limitada por conexión: se empieza de cero para sembrar cuentas

@@ -11,7 +11,7 @@
 - **Variables** (Vercel → Settings → Environment Variables, entorno Production):
   - Base de datos: `TURSO_DATABASE_URL` y `TURSO_AUTH_TOKEN`. Ya están.
   - Correo: `BREVO_API_KEY` y `MAIL_FROM`.
-  - Páginas legales: `LEGAL_NAME` y `LEGAL_EMAIL`.
+  - Páginas legales: `LEGAL_NAME` y `LEGAL_EMAIL`. Para el aviso legal (`/aviso-legal`), `LEGAL_NIF` y `LEGAL_ADDRESS`: hasta que estén, la página enseña un aviso amarillo.
   - Moderadores y panel de datos: `ADMIN_EMAILS` (correos separados por comas). Esas cuentas, con el correo verificado, moderan las denuncias y abren https://pistea.vercel.app/panel: todas las cuentas con sus datos, gráficas, informe y descarga para Excel.
   - Opcional: `APP_URL`, si usas un dominio propio.
   - Tras cambiar una variable hay que publicar de nuevo (Deployments → ⋯ → Redeploy).

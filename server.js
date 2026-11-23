@@ -81,7 +81,8 @@ const dbReady = () => ready || (ready = init().catch(e => { ready = null; throw 
 let lastClean = 0;
 async function housekeeping(force) {   // caducidades y retención de datos (RGPD: los registros de seguridad se guardan 180 días)
   const now = Date.now(); if (!force && now - lastClean < HOUR) return; lastClean = now;
-  await atomic([['DELETE FROM tokens WHERE exp<?', [now]], ['DELETE FROM resets WHERE exp<?', [now]], ['DELETE FROM verifs WHERE exp<?', [now]], ['DELETE FROM hits WHERE ts<?', [now - DAY]], ['DELETE FROM audit_logs WHERE ts<?', [now - 180 * DAY]]]).catch(e => console.error('[limpieza]', e.message));
+  await atomic([['DELETE FROM tokens WHERE exp<?', [now]], ['DELETE FROM resets WHERE exp<?', [now]], ['DELETE FROM verifs WHERE exp<?', [now]], ['DELETE FROM hits WHERE ts<?', [now - DAY]], ['DELETE FROM audit_logs WHERE ts<?', [now - 180 * DAY]],
+    ['DELETE FROM notifs WHERE ts<?', [now - 60 * DAY]], ["DELETE FROM reports WHERE status='resolved' AND resolved_at<?", [now - 180 * DAY]]]).catch(e => console.error('[limpieza]', e.message));
 }
 
 // ---------- estadísticas ----------
@@ -396,6 +397,16 @@ async function sendVerify(u) {
   await atomic([['DELETE FROM verifs WHERE uid=?', [u.id]], ['INSERT INTO verifs(th,uid,exp) VALUES(?,?,?)', [sha(t), u.id, Date.now() + 2 * DAY]]]);
   return sendMail(u.email, 'Confirma tu correo en Pistea', mail(`Hola, ${u.alias}`, 'Confirma que este correo es tuyo para aparecer en los rankings y en la comunidad de Pistea.', 'Confirmar mi correo', link, 'El enlace caduca en 48 horas. Si no has creado una cuenta en Pistea, ignora este correo.'));
 }
+
+// ---------- moderación: avisos con los motivos (Reglamento de Servicios Digitales, art. 16 y 17) ----------
+const RSN_TXT = { spam: 'spam o publicidad', ofensivo: 'nombre, foto o texto ofensivo', trampas: 'datos falsos o trampas en el ranking', suplantacion: 'hacerse pasar por otra persona', privacidad: 'publicar datos privados de otra persona', otro: 'otro motivo' };
+const reasonsTxt = list => [...new Set(list)].map(r => RSN_TXT[r] || r).join(', ');
+const CONTACT = env.LEGAL_EMAIL || '';
+const reclamar = CONTACT ? `Si no estás de acuerdo, escríbenos a ${CONTACT} explicando por qué: lo revisará una persona y te contestaremos. También puedes acudir a los tribunales.` : 'Si no estás de acuerdo, responde a este correo explicando por qué: lo revisará una persona y te contestaremos. También puedes acudir a los tribunales.';
+// Al afectado: qué se ha hecho, por qué, si fue automático y cómo reclamar
+const sendDecision = (to, alias, title, what, why, auto) => sendMail(to, title, mail(`Hola, ${alias}`, `${what} Motivo: ${why}, según las normas de la comunidad de Pistea. ${auto ? 'Es una medida automática y temporal: la aplica Pistea cuando varias personas denuncian una cuenta, hasta que una persona la revisa.' : 'Lo ha decidido una persona del equipo de Pistea tras revisar las denuncias.'}`, 'Leer las normas', APP_URL + '/normas', reclamar)).catch(() => false);
+// A quien denunció: que su denuncia está resuelta (sin detalles sobre la otra persona)
+const sendReportDone = (to, alias, acted) => sendMail(to, 'Hemos revisado tu denuncia en Pistea', mail(`Hola, ${alias}`, acted ? 'Hemos revisado tu denuncia y hemos tomado medidas según las normas de la comunidad. Gracias por ayudarnos a cuidar Pistea.' : 'Hemos revisado tu denuncia y no hemos visto un incumplimiento de las normas de la comunidad. Gracias por avisarnos: si vuelve a pasar, denúncialo otra vez.', 'Leer las normas', APP_URL + '/normas', reclamar)).catch(() => false);
 
 // ---------- API ----------
 // Versión mínima de la APK de Android (versionCode de app/android/app/build.gradle). Si la APK instalada es más vieja, la app avisa y enseña dónde bajar la nueva.
@@ -857,7 +868,11 @@ const routes = {
       // Para ocultar a alguien solo cuentan las denuncias de personas visibles (verificadas, ni ocultas ni suspendidas): tres
       // cuentas recién creadas sin verificar no pueden esconder a nadie. Las demás denuncias le llegan igual al moderador
       const n = await count(`SELECT COUNT(DISTINCT r.reporter) n FROM reports r JOIN users p ON p.id=r.reporter WHERE r.target=? AND r.status='open' AND ${pubCond('p.')}`, [target]);
-      if (n >= 3) { await run('UPDATE users SET hidden=1 WHERE id=?', [target]); fresh(); }   // tres personas distintas: se oculta hasta revisarlo
+      if (n >= 3) {   // tres personas distintas: se oculta hasta revisarlo, y se le dice por qué (DSA art. 17)
+        const tg = await one('SELECT email, alias, hidden FROM users WHERE id=?', [target]);
+        await run('UPDATE users SET hidden=1 WHERE id=?', [target]); fresh();
+        if (tg && !tg.hidden) await sendDecision(tg.email, tg.alias, 'Tu cuenta de Pistea está oculta mientras la revisamos', 'Varias personas han denunciado tu cuenta. Mientras una persona lo revisa, tu perfil y tus días no se ven en los rankings, la comunidad ni la búsqueda. Puedes seguir usando Pistea.', reasonsTxt((await all("SELECT reason FROM reports WHERE target=? AND status='open'", [target])).map(r => r.reason)), true);
+      }
       if (MAIL_READY) for (const a of ADMINS) sendMail(a, 'Nueva denuncia en Pistea', mail('Nueva denuncia', `Motivo: ${reason}. Denuncias abiertas contra ese usuario: ${n}.`, 'Revisar', APP_URL + '/', 'Entra con tu cuenta de administrador y abre Perfil → Moderación.')).catch(() => {});
     }
     await audit(u.id, 'REPORT', req, { reason }); send(res, 200, { ok: true });
@@ -874,12 +889,25 @@ const routes = {
     if (!isAdmin(u)) return send(res, 403, { error: 'Solo para moderadores.' });
     const r = await one("SELECT * FROM reports WHERE id=? AND status='open'", [str(b.id, 40)]), action = str(b.action, 20);
     if (!r) return send(res, 404, { error: 'Esa denuncia ya está resuelta.' });
+    if (!['descartar', 'quitar_dia', 'limpiar_perfil', 'suspender'].includes(action) || (action === 'quitar_dia' && !r.day)) return send(res, 400, { error: 'Acción no válida.' });
+    // Para los avisos: la persona afectada, los motivos y quién denunció (antes de cerrar las denuncias)
+    const tg = await one('SELECT email, alias, hidden FROM users WHERE id=?', [r.target]);
+    const open = await all(`SELECT r.reason reason, r.reporter reporter, p.email email, p.alias alias FROM reports r LEFT JOIN users p ON p.id=r.reporter WHERE r.target=? AND r.status='open'${action === 'quitar_dia' ? ' AND r.day=?' : ''}`, [r.target, ...(action === 'quitar_dia' ? [r.day] : [])]);
     const done = (extra = []) => atomic([...extra, ["UPDATE reports SET status='resolved', resolved_by=?, resolved_at=?, action=? WHERE target=? AND status='open'" + (action === 'quitar_dia' ? ' AND day=?' : ''), [u.id, Date.now(), action, r.target, ...(action === 'quitar_dia' ? [r.day] : [])]]]);
     if (action === 'descartar') await done([['UPDATE users SET hidden=0 WHERE id=?', [r.target]]]);
     else if (action === 'quitar_dia' && r.day) await done([['DELETE FROM kudos WHERE day=?', [r.day]], ['DELETE FROM passes WHERE day=?', [r.day]], ['DELETE FROM days WHERE id=?', [r.day]]]);
     else if (action === 'limpiar_perfil') await done([["UPDATE users SET alias='Esquiador ' || substr(id,1,4), bio='', avatar=NULL, handle=NULL, gear='', club='', hidden=0 WHERE id=?", [r.target]], ['DELETE FROM avatars WHERE uid=?', [r.target]]]);
     else if (action === 'suspender') await done([['UPDATE users SET banned=1 WHERE id=?', [r.target]], ['DELETE FROM tokens WHERE uid=?', [r.target]]]);
     else return send(res, 400, { error: 'Acción no válida.' });
+    // Avisos (DSA art. 16 y 17): al afectado, con el motivo y cómo reclamar; a quien denunció, que está resuelta
+    const why = reasonsTxt(open.map(x => x.reason));
+    if (tg) {
+      if (action === 'quitar_dia') await sendDecision(tg.email, tg.alias, 'Hemos quitado uno de tus días en Pistea', 'Hemos quitado de Pistea uno de tus días de esquí, con sus cifras y las pistas que sumaba a tu pasaporte.', why, false);
+      else if (action === 'limpiar_perfil') await sendDecision(tg.email, tg.alias, 'Hemos limpiado tu perfil de Pistea', 'Hemos quitado tu nombre público, tu @usuario, tu foto, tu biografía, tu club y tu equipo. Puedes poner otros desde Editar perfil, cumpliendo las normas.', why, false);
+      else if (action === 'suspender') await sendDecision(tg.email, tg.alias, 'Hemos suspendido tu cuenta de Pistea', 'Hemos suspendido tu cuenta: no podrás entrar en Pistea. Tus datos siguen guardados hasta que pidas borrarlos.', why, false);
+      else if (action === 'descartar' && tg.hidden) await sendMail(tg.email, 'Tu cuenta de Pistea vuelve a verse', mail(`Hola, ${tg.alias}`, 'Hemos revisado las denuncias contra tu cuenta y no incumple las normas de la comunidad. Tu perfil y tus días vuelven a verse como antes.', 'Abrir Pistea', APP_URL + '/', 'Gracias por tu paciencia.')).catch(() => false);
+    }
+    for (const x of [...new Map(open.filter(x => x.email).map(x => [x.reporter, x])).values()]) await sendReportDone(x.email, x.alias, action !== 'descartar');
     fresh(); await audit(u.id, 'MODERATION', req, { action, target: r.target }); send(res, 200, { ok: true });
   },
   // Panel de datos (/panel), solo ADMIN_EMAILS: todas las cuentas con su ficha y los días grabados, sin contraseñas ni
@@ -969,7 +997,7 @@ async function handler(req, res) {
     // Panel de datos para administradores: la página no lleva datos (los pide a /api/admin/panel, que comprueba quién es)
     if (url.pathname === '/panel.js') return serveFile(req, res, path.join(__dirname, 'public'), 'panel.js', 'no-store');
     if (/^\/panel\/?$/.test(url.pathname)) { res.writeHead(200, { ...PAGE_HEADERS, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow', 'X-Frame-Options': 'DENY' }); return res.end(fs.readFileSync(path.join(__dirname, 'public', 'panel.html'))); }
-    const lp = /^\/(privacidad|condiciones|normas|borrar-cuenta)\/?$/.exec(url.pathname);
+    const lp = /^\/(privacidad|condiciones|normas|borrar-cuenta|aviso-legal|licencias)\/?$/.exec(url.pathname);
     if (lp) { res.writeHead(200, LEGAL_HEADERS); return res.end(legal(lp[1], env)); }
     if (url.pathname === '/healthz') { if (DB_ERR) return send(res, 503, { ok: false }); await dbReady(); await run('SELECT 1'); return send(res, 200, { ok: true }); }
     res.writeHead(200, PAGE_HEADERS); res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
