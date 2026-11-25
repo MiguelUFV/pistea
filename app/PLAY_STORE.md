@@ -71,12 +71,12 @@ App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (ver
 | ID del dispositivo u otros (IP y tipo de dispositivo del registro de seguridad) | Obligatorio | Prevención de fraude, seguridad y cumplimiento |
 
 ## APK fuera de la tienda (enlace `/android`)
-- Versión vigente: **1.2.0 (versionCode 3)**, del 23-nov-2026. Está en Google Drive y `/android` lleva a ella (`APK.url` en `server.js`).
-- Huella SHA-256 de esa APK: `84f7a5dd3f7dec032fa44222e8ccfbd71e3e48e464862ad70fb9a8c91c42fcf0`. Sirve para comprobar que nadie la ha cambiado en Drive.
-- Las APK anteriores (versiones 1 y 2) siguen públicas en Drive: bórralas cuando quieras.
-- `APK_MIN` sigue en 2: quien tenga la 2 no ve el aviso. Súbelo a 3 si quieres que todos se actualicen.
+- Versión vigente: **1.3.0 (versionCode 4)**, del 25-nov-2026: `Pistea-1.3.0.apk` en la raíz de Google Drive, compartida con «cualquiera con el enlace». `/android` lleva a su descarga directa (`APK.url` en `server.js`: `drive.usercontent.google.com/download?…&confirm=t`, que se salta el aviso de Drive «no se puede analizar en busca de virus» que sale con toda APK).
+- Huella SHA-256 de esa APK: `6393c43c5dcfb2e26603b074987926a10f182dce21a0697e48e2cc646df923b2` (firmada con la llave de subida, CN=Pistea). Sirve para comprobar que nadie la ha cambiado en Drive.
+- Las APK anteriores (`Pistea.apk`, versiones 1 a 3) siguen públicas en Drive: bórralas cuando quieras.
+- El mínimo está en 4 (`APK.min` en `server.js`; en Vercel no hay `APK_URL` ni `APK_MIN`, así que mandan los de `server.js`): quien tenga una versión anterior ve el aviso «Hay una versión nueva».
 
-- **1.3.0 (versionCode 4), 25-nov-2026, sin publicar aún.** Novedades del grabador: si Android lo cierra, vuelve solo y sigue en el mismo día (si no puede, avisa y se sigue con un toque); para solo al irse de la estación o antes de las 16 horas, y lo avisa; «Retomar» sigue en el mismo día. Texto para «Novedades» de Play: «La grabación del día aguanta mejor: si el teléfono la cierra, sigue sola sin perder lo grabado, y termina sola cuando te vas de la estación.»
+- **1.3.0 (versionCode 4), 25-nov-2026: APK publicada; el AAB (`app/android/app/build/outputs/bundle/release/app-release.aab`) falta subirlo a Play Console.** Novedades del grabador: si Android lo cierra, vuelve solo y sigue en el mismo día (si no puede, avisa y se sigue con un toque); para solo al irse de la estación o antes de las 16 horas, y lo avisa; «Retomar» sigue en el mismo día. Texto para «Novedades» de Play: «La grabación del día aguanta mejor: si el teléfono la cierra, sigue sola sin perder lo grabado, y termina sola cuando te vas de la estación.»
 
 ## 4. Publicar una versión
 1. Sube `versionCode` en `app/android/app/build.gradle` (+1 cada vez) y `versionName`.
