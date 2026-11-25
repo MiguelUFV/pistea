@@ -1,4 +1,4 @@
-import{f as Ti,B as Jc}from"./_virtual_ficha-CUAhdLf4.js";/**
+import{f as Ti,B as Jc}from"./_virtual_ficha-Q2aWojkC.js";/**
  * @license
  * Copyright 2010-2024 Three.js Authors
  * SPDX-License-Identifier: MIT
