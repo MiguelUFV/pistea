@@ -76,6 +76,8 @@ App firmada: `app/android/app/build/outputs/bundle/release/app-release.aab` (ver
 - Las APK anteriores (versiones 1 y 2) siguen públicas en Drive: bórralas cuando quieras.
 - `APK_MIN` sigue en 2: quien tenga la 2 no ve el aviso. Súbelo a 3 si quieres que todos se actualicen.
 
+- **1.3.0 (versionCode 4), 25-nov-2026, sin publicar aún.** Novedades del grabador: si Android lo cierra, vuelve solo y sigue en el mismo día (si no puede, avisa y se sigue con un toque); para solo al irse de la estación o antes de las 16 horas, y lo avisa; «Retomar» sigue en el mismo día. Texto para «Novedades» de Play: «La grabación del día aguanta mejor: si el teléfono la cierra, sigue sola sin perder lo grabado, y termina sola cuando te vas de la estación.»
+
 ## 4. Publicar una versión
 1. Sube `versionCode` en `app/android/app/build.gradle` (+1 cada vez) y `versionName`.
 2. `cd app` · `PISTEA_CANAL=play PISTEA_URL=https://pistea.vercel.app node sync.js` · `cd android` · `gradlew bundleRelease`. **`PISTEA_CANAL=play` es obligatorio**: así la app no enseña el aviso «Hay una versión nueva» (descarga una APK fuera de Play), que Google prohíbe. La APK que se reparte por el enlace `/android` se hace sin esa variable.

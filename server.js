@@ -987,7 +987,7 @@ const routes = {
     await audit(u.id, 'ADMIN_PANEL', req, { users: out.length });
     send(res, 200, { now: Date.now(), users: out, days: days.map(d => [d.uid, d.station, d.ts, d.desnivel, d.km, d.bajadas, d.vmax, d.freeride, d.src]), reports: open, stations: Object.fromEntries(STATIONS.map(s => [s[0], s[1]])) });
   },
-  'GET /api/config': async ({ res }) => { res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300'); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' }); res.end(JSON.stringify({ stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK, captcha: CAPTCHA ? env.TURNSTILE_SITE_KEY : null })); }
+  'GET /api/config': async ({ res }) => { res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300'); res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=60, s-maxage=300' }); res.end(JSON.stringify({ stations: STATIONS.map(s => ({ id: s[0], n: s[1], z: s[2] })), geo: Object.fromEntries(STATIONS.filter(s => GEO[s[0]]).map(s => [s[0], [GEO[s[0]].lat, GEO[s[0]].lon, GEO[s[0]].km]])), sim: ALLOW_SIM, verify: VERIFY, maps: MAPS_URL ? MAPS_URL + '/' : '/3d/', apk: APK, captcha: CAPTCHA ? env.TURNSTILE_SITE_KEY : null })); }
 };
 
 // ---------- ficheros estáticos (página, fotos de perfil y mapas 3D) ----------

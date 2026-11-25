@@ -5,4 +5,5 @@
     <string name="package_name">com.pistea.app</string>
     <string name="custom_url_scheme">com.pistea.app</string>
     <string name="canal_grabacion">Grabación del día de esquí</string>
+    <string name="canal_avisos">Avisos de la grabación</string>
 </resources>

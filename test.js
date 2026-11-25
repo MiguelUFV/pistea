@@ -90,6 +90,8 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   await browser()('POST', '/api/verify', { token: linkFor('bea@pistea.es', 'verify') });
   t('verificada: ya sale en el ranking', (await A('GET', '/api/rank'))[1].rows.some(r => r.alias === 'Bea Oculta'));
   t('config dice si se exige verificar', (await A('GET', '/api/config'))[1].verify === true);
+  const cg = (await A('GET', '/api/config'))[1].geo;
+  t('config da centro y radio de las 27 estaciones (el grabador para solo al irse)', cg && Object.keys(cg).length === 27 && Object.values(cg).every(g => g.length === 3 && g.every(Number.isFinite) && g[2] > 1), JSON.stringify(cg && cg.formigal));
   // --- nombres ofensivos
   t('nombre ofensivo', (await browser()('POST', '/api/register', { ...REG, email: 'x1@pistea.es', alias: 'G1l1poll4s' }))[0] === 400);
   t('nombre normal con «puta» dentro de otra palabra', (await A('POST', '/api/me', { alias: 'Disputa Nieve' }))[0] === 200);

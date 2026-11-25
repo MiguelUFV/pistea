@@ -29,7 +29,8 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 
-// Lo que la web (gps.js) puede pedirle al grabador: empezar y parar, cómo está, las posiciones apuntadas desde una dada,
+// Lo que la web (app.js) puede pedirle al grabador: empezar (o seguir una grabación, con su id) y parar, cómo está, las
+// posiciones apuntadas desde una dada,
 // borrar una grabación ya guardada en la app, el texto del aviso fijo, que Android no la duerma (ahorro de batería), que
 // la pantalla no se apague (el velocímetro) y abrir los ajustes. Manda en directo «fix» con cada posición y «state»
 // cuando cambia algo (empieza, para, se apaga el GPS).
@@ -95,7 +96,10 @@ public class GrabadorPlugin extends Plugin implements GrabadorService.Listener {
         PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
         JSObject o = new JSObject();
         long id = p.getLong("id", 0);
+        File f = id == 0 ? null : new File(GrabadorService.dir(c), id + ".csv");
         o.put("id", id == 0 ? null : id);
+        o.put("since", id == 0 ? null : p.getLong("since", id));
+        o.put("last", f != null && f.exists() ? (Long) f.lastModified() : null);   // cuándo se apuntó la última posición
         o.put("recording", GrabadorService.running);
         o.put("stopped", p.getString("stopped", null));
         o.put("allowed", granted(Manifest.permission.ACCESS_FINE_LOCATION) || granted(Manifest.permission.ACCESS_COARSE_LOCATION));
@@ -142,13 +146,29 @@ public class GrabadorPlugin extends Plugin implements GrabadorService.Listener {
             call.reject("La ubicación del teléfono está apagada", "off");
             return;
         }
-        long id = System.currentTimeMillis();
-        prefs().edit().putLong("id", id).remove("stopped").apply();
+        // Con `id` de una grabación que sigue en el teléfono (cortada por Android, parada al irse de la estación o con
+        // «Parar»), se sigue en el mismo fichero: el día no se parte en dos. Si no, una nueva
+        Long want = call.getLong("id");
+        boolean resume = want != null && want != 0 && new File(GrabadorService.dir(getContext()), want + ".csv").exists();
+        long id = resume ? want : System.currentTimeMillis();
         Long since = call.getLong("since", id);   // desde cuándo cuenta el reloj del aviso (el principio del día)
-        Intent i = new Intent(getContext(), GrabadorService.class).setAction(GrabadorService.START).putExtra("id", id).putExtra("since", since == null ? id : since);
+        if (since == null) since = id;
+        SharedPreferences.Editor e = prefs().edit().putLong("id", id).putLong("since", since).remove("stopped").putLong("away", 0);
+        if (!resume) e.putBoolean("seen", false).putLong("first", 0);
+        // La estación (para parar sola al irse de ella, ParadaSola): su nombre, el centro y el radio de su círculo en km
+        Double lat = call.getDouble("lat"), lon = call.getDouble("lon"), km = call.getDouble("km");
+        if (lat != null && lon != null && km != null && km > 0)
+            e.putLong("lat", Double.doubleToRawLongBits(lat)).putLong("lon", Double.doubleToRawLongBits(lon)).putFloat("r", (float) (km * 1000));
+        else if (!resume) e.remove("lat").remove("lon").remove("r");
+        String name = call.getString("name");
+        if (name != null) e.putString("name", name);
+        else if (!resume) e.remove("name");
+        e.commit();   // antes de arrancar el servicio, que lo lee al empezar
+        Intent i = new Intent(getContext(), GrabadorService.class).setAction(GrabadorService.START).putExtra("id", id).putExtra("since", (long) since);
         ContextCompat.startForegroundService(getContext(), i);
         JSObject o = status();
         o.put("recording", true);
+        o.put("resumed", resume);
         call.resolve(o);
     }
 
