@@ -119,10 +119,13 @@ function stationOf(id) {
   return s;
 }
 // El recorrido que se guarda y se enseña: sin lo de antes del primer remonte o bajada ni lo de después de la última (salir
-// del alojamiento, aparcar) y solo dentro del círculo de la estación (estaciones_geo.json). Puntos [x, z, clase]; clase 6 =
-// parado, andando o sin mapa. Para los días guardados antes del recorte se aplica al enseñarlos a otros
+// del alojamiento, aparcar) y solo dentro del círculo de la estación (estaciones_geo.json). Puntos [x, z, clase, s]; clase 6 =
+// parado, andando o sin mapa; s, los segundos desde el t0 del día (desde el 25-nov-2026: los anteriores no lo traen). Para
+// los días guardados antes del recorte se aplica al enseñarlos a otros, y a ellos sin s, como el resto de las horas del día
+// (LEGAL.md L1): own = true solo al guardar el día de su dueño
 const GEOLOC = new Map();
-function trimTrack(track, station) {
+const noTime = t => t.map(p => Array.isArray(p) && p.length > 3 ? p.slice(0, 3) : p);
+function trimTrack(track, station, own = false) {
   if (!Array.isArray(track) || !track.length) return [];
   const isMove = p => Array.isArray(p) && (p.length < 3 || p[2] !== 6);
   let a = 0, b = track.length - 1; while (a <= b && !isMove(track[a])) a++; while (b >= a && !isMove(track[b])) b--;
@@ -132,7 +135,19 @@ function trimTrack(track, station) {
     if (!GEOLOC.has(station)) { let c = null; try { const geo = JSON.parse(fs.readFileSync(path.join(__dirname, 'public', 'seg', station + '.json'), 'utf8')).geo; c = geo ? toLocal(g.lat, g.lon, geo) : null; } catch {} GEOLOC.set(station, c); }
     const c = GEOLOC.get(station), r = g.km * 1000; if (c) out = out.filter(p => Math.hypot(p[0] - c.x, p[1] - c.z) <= r);
   }
-  return out.length >= 2 ? out : [];
+  return out.length >= 2 ? (own ? out : noTime(out)) : [];
+}
+// Para las tarjetas (comunidad y perfil, de 300 × 90): sin horas y con como mucho 160 puntos (Douglas-Peucker), que a ese
+// tamaño no se distinguen de los 1.000 del día. El recorrido entero, con sus horas para su dueño, se pide al abrir el día
+function cardTrack(track, station, own) {
+  const t = own ? noTime(Array.isArray(track) ? track : []) : trimTrack(track, station);
+  if (t.length <= 160 || !Array.isArray(t[0])) return t;
+  const off = (a, b, p) => { const bx = b[0] - a[0], bz = b[1] - a[1], l2 = bx * bx + bz * bz, u = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * bx + (p[1] - a[1]) * bz) / l2)) : 0; return Math.hypot(a[0] + bx * u - p[0], a[1] + bz * u - p[1]); };
+  for (let tol = 8; ; tol *= 1.5) {
+    const keep = new Uint8Array(t.length), todo = [[0, t.length - 1]]; keep[0] = keep[t.length - 1] = 1;
+    while (todo.length) { const [a, b] = todo.pop(); let far = -1, dm = tol; for (let i = a + 1; i < b; i++) { const d = off(t[a], t[b], t[i]); if (d > dm) { dm = d; far = i; } } if (far >= 0) { keep[far] = 1; todo.push([a, far], [far, b]); } }
+    const out = t.filter((p, i) => keep[i]); if (out.length <= 160 || tol > 500) return out;
+  }
 }
 const SRC = ALLOW_SIM ? '1=1' : "src!='sim'", SRC_D = ALLOW_SIM ? '1=1' : "d.src!='sim'";
 const pubCond = p => `${VERIFY ? `COALESCE(${p}verified,1)=1 AND ` : ''}COALESCE(${p}hidden,0)=0 AND COALESCE(${p}banned,0)=0`;   // ver VERIFY
@@ -738,7 +753,7 @@ const routes = {
     const rows = await all(`SELECT d.id id, d.uid uid, d.station station, d.ts ts, d.desnivel desnivel, d.km km, d.bajadas bajadas, d.vmax vmax, d.freeride freeride, d.track track, u.alias alias, u.avatar avatar,
       (SELECT COUNT(*) FROM kudos k WHERE k.day=d.id) kudos, EXISTS(SELECT 1 FROM kudos k WHERE k.day=d.id AND k.uid=?) liked
       FROM days d JOIN users u ON u.id=d.uid WHERE ${SRC_D} AND (${pubU()} OR d.uid=?) AND ${notBlocked('d.uid')} AND ${daysVisible('u.', 'd.uid')} AND (?=0 OR d.uid=? OR d.uid IN (SELECT b FROM follows WHERE a=?)) ORDER BY d.ts DESC LIMIT 15`, [u.id, u.id, u.id, u.id, u.id, u.id, onlyF, u.id, u.id]);
-    send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: d.uid === u.id ? J(d.track) : trimTrack(J(d.track), d.station), liked: !!d.liked })));
+    send(res, 200, rows.map(d => ({ ...d, avatar: safeAvatar(d.avatar), track: cardTrack(J(d.track), d.station, d.uid === u.id), liked: !!d.liked })));
   },
   'POST /api/days': async ({ res, u, b }) => {
     const c = b.col && typeof b.col === 'object' ? b.col : {}, src = b.source === 'sim' ? 'sim' : 'gps';
@@ -754,7 +769,7 @@ const routes = {
       if (fx && fx.length && await one('SELECT 1 x FROM days WHERE uid=? AND t1>? AND t0<?', [u.id, fx[0].t, fx[fx.length - 1].t])) return send(res, 409, { error: 'Ese día ya está guardado.' });
       const v = checkTrace(b.trace, b.station); if (v.error) return send(res, 400, { error: v.error });
       Object.assign(b, v.p, { total: (v.t1 - v.t0) / HOUR }); t0 = v.t0; t1 = v.t1;   // lo que mande el móvil se sustituye por lo calculado aquí
-      b.track = trimTrack(b.track, b.station);   // sin el camino desde el alojamiento ni lo de fuera de la estación
+      b.track = trimTrack(b.track, b.station, true);   // sin el camino desde el alojamiento ni lo de fuera de la estación (con sus horas)
     }
     // Con GPS, el recorrido y el desglose son los del motor aquí (de fiar); en la simulación (solo en desarrollo), lo que mande
     const gps = src === 'gps';
@@ -881,7 +896,7 @@ const routes = {
     delete t.verified; delete t.hidden; delete t.banned;
     // Sus días y sus estaciones, solo si los puede ver quien mira; con «solo yo», tampoco sus totales
     const vis = visOf(t), see = me || vis === 'todos' || (vis === 'seguidores' && !!following);
-    send(res, 200, { ...t, ...card(t), vis, daysHidden: !see, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals: see || vis !== 'yo' ? totals : null, stations: see ? stations : [], days: see ? days.map(d => ({ ...d, track: me ? J(d.track) : trimTrack(J(d.track), d.station) })) : [], pos: see || vis !== 'yo' ? (pos || {}).pos || 0 : 0, streak: see ? stk : 0, followers, followingN, following: !!following, followsMe: !!followsMe, requested: !!requested, approve: !!t.approve, canList: me || !t.approve || !!following, me });   // la edad es privada
+    send(res, 200, { ...t, ...card(t), vis, daysHidden: !see, age: me ? t.age : null, avatar: safeAvatar(t.avatar), totals: see || vis !== 'yo' ? totals : null, stations: see ? stations : [], days: see ? days.map(d => ({ ...d, track: cardTrack(J(d.track), d.station, me) })) : [], pos: see || vis !== 'yo' ? (pos || {}).pos || 0 : 0, streak: see ? stk : 0, followers, followingN, following: !!following, followsMe: !!followsMe, requested: !!requested, approve: !!t.approve, canList: me || !t.approve || !!following, me });   // la edad es privada
   },
   'POST /api/kudos': async ({ res, u, b }) => {
     if (await limited('w:' + u.id, 120, MIN)) return send(res, 429, { error: 'Vas demasiado rápido. Espera un momento.' });

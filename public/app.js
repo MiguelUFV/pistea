@@ -2,7 +2,7 @@
 const $=s=>document.querySelector(s),fmt=n=>Math.round(n).toLocaleString('es-ES'),dec=(n,d=1)=>(+n||0).toLocaleString('es-ES',{minimumFractionDigits:d,maximumFractionDigits:d});   // decimales con coma
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const IC={est:'<path d="M3 20l6-10 4 6 3-4 5 8z"/>',com:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-5.5 6-5.5s6 2 6 5.5M16 5.2a3 3 0 010 5.6M18.5 14.8c1.7.7 2.5 2.2 2.5 4.2"/>',go:'<path d="M5 18l3-9 4 3 3-7M4 21h16"/>',datos:'<path d="M4 20h16M7 16v-5M12 16V6M17 16v-8"/>',rec:'<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3"/>',yo:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',up:'<path d="M12 19V5M6 11l6-6 6 6"/>',heart:'<path d="M12 20s-7-4.6-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.4-7 10-7 10z"/>',lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',star:'<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',flame:'<path d="M12 3c1 4 5 5 5 10a5 5 0 01-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z"/>',bolt:'<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',map:'<path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2zM9 4v14M15 6v14"/>',clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',cam:'<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',pin:'<path d="M12 21s-6-5.3-6-11a6 6 0 0112 0c0 5.7-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>',flag:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',block:'<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>',down:'<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',devices:'<rect x="3" y="5" width="13" height="10" rx="1.5"/><path d="M1.5 18h16M18 9h4v11h-4z"/>',back:'<path d="M15 5l-7 7 7 7"/>',check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',crown:'<path d="M4 19h16M5 16L3.5 7.5 8.5 11 12 5l3.5 6 5-3.5L19 16z"/>',play:'<path d="M8 5v14l11-7z"/>',club:'<path d="M12 3l7 3v5c0 4.5-3 7.8-7 10-4-2.2-7-5.5-7-10V6z"/>',ski:'<path d="M4 20.5L14.6 4.4c.6-.9 1.8-1.1 2.6-.4M9 21L19.6 4.9c.6-.9 1.8-1.1 2.6-.4"/>',snowboard:'<rect x="2.2" y="9.2" width="19.6" height="5.6" rx="2.8" transform="rotate(-32 12 12)"/><path d="M8.6 11.6l1.3 2M13.4 8.6l1.3 2"/>',ambos:'<path d="M3.5 19.5L12 6.3c.5-.8 1.4-.9 2-.4M7 20l8.5-13.2c.5-.8 1.4-.9 2-.4"/><rect x="11" y="13.6" width="11.4" height="4.4" rx="2.2" transform="rotate(-32 16.7 15.8)"/>'};
-IC.bell='<path d="M6 17v-6a6 6 0 0112 0v6l1.6 2.2H4.4zM10 21.2a2.2 2.2 0 004 0"/>';IC.undo='<path d="M9 7L4 12l5 5M5 12h10a5 5 0 010 10"/>';
+IC.pause='<path d="M8.5 5v14M15.5 5v14"/>';IC.bell='<path d="M6 17v-6a6 6 0 0112 0v6l1.6 2.2H4.4zM10 21.2a2.2 2.2 0 004 0"/>';IC.undo='<path d="M9 7L4 12l5 5M5 12h10a5 5 0 010 10"/>';
 const ic=(n)=>`<svg class="i" viewBox="0 0 24 24">${IC[n]}</svg>`;
 const S=[['alto-campoo','Alto Campoo','Cantábrica'],['astun','Astún','Pirineos'],['baqueira-beret','Baqueira Beret','Pirineos'],['boi-taull','Boí Taüll','Pirineos'],['candanchu','Candanchú','Pirineos'],['cerler','Cerler','Pirineos'],['espot','Espot','Pirineos'],['formigal','Formigal','Pirineos'],['fuentes-de-invierno','Fuentes de Invierno','Cantábrica'],['javalambre','Javalambre','Ibérica'],['la-covatilla','La Covatilla','Central'],['la-molina','La Molina','Pirineos'],['la-pinilla','La Pinilla','Central'],['leitariegos','Leitariegos','Cantábrica'],['manzaneda','Manzaneda','Galicia'],['masella','Masella','Pirineos'],['panticosa','Panticosa','Pirineos'],['port-aine','Port Ainé','Pirineos'],['port-del-comte','Port del Comte','Pirineos'],['san-isidro','San Isidro','Cantábrica'],['sierra-nevada','Sierra Nevada','Bética'],['valdelinares','Valdelinares','Ibérica'],['valdesqui','Valdesquí','Central'],['valdezcaray','Valdezcaray','Ibérica'],['valgrande-pajares','Valgrande-Pajares','Cantábrica'],['vall-de-nuria','Vall de Núria','Pirineos'],['vallter','Vallter','Pirineos']]
  .map((a,i)=>({id:a[0],n:a[1],z:a[2],x:(i*37%100)+'%',y:(i*61%100)+'%'})),SM=Object.fromEntries(S.map(s=>[s.id,s]));
@@ -13,15 +13,27 @@ const av=(n,a)=>`<span class="av" style="${a?`background-image:url(${esc(a)});ba
 const ago=t=>{const h=(Date.now()-t)/36e5;return h<1?'Hace minutos':h<24?`Hace ${Math.floor(h)} h`:h<48?'Ayer':`Hace ${Math.floor(h/24)} días`};
 let st={tab:'est',met:'desnivel',amb:'España',per:'temporada',flt:'Todas',scope:'Amigos',toast:0,user:null,me:null,loading:true,offline:false,stats:[],feed:[],rank:null,mode:'login',err:''};
 // PP: el pasaporte de pistas (GET /api/passport); WT: el temporizador de las historias de «Tu temporada»
-let T,W=null,qt,rq=0,curSave=null,SI={},FC={},PP=null,WT=0;fetch('/img/fotos.json').then(r=>r.json()).then(j=>{FC=j}).catch(()=>{});st.sim=true;fetch('/img/estaciones.json?v=4').then(r=>r.json()).then(j=>{SI=j;if(st.me)render()}).catch(()=>{});
+let T,W=null,qt,rq=0,curSave=null,SI={},FC={},PP=null,WT=0;fetch('/img/fotos.json').then(r=>r.json()).then(j=>{FC=j}).catch(()=>{});st.sim=true;fetch('/img/estaciones.json?v=5').then(r=>r.json()).then(j=>{SI=j;if(st.me)render()}).catch(()=>{});
 const LS=(k,v)=>{try{return v===undefined?localStorage.getItem(k):v===null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){return null}};
 const feedQ=()=>'feed?scope='+(st.scope==='Amigos'?'amigos':'todos');
+const nap=ms=>new Promise(r=>setTimeout(r,ms));
+// Aviso fijo de «sin conexión»: aparece al fallar una petición o al perder la red y se quita con la primera que responde
+const net=ok=>{let e=document.getElementById('net');if(ok){if(e)e.remove();return}if(!e){e=document.createElement('div');e.id='net';e.setAttribute('role','status');e.textContent='Sin conexión. Reintentando…';document.body.appendChild(e)}};
+addEventListener('offline',()=>net(false));addEventListener('online',()=>net(true));
 async function api(path,opt={}){
- const m=opt.method||(opt.body?'POST':'GET'),old=LS('pistea_t');let r;try{r=await fetch('/api/'+path,{method:m,credentials:'same-origin',headers:{'Content-Type':'application/json',...(m!=='GET'?{'X-Pistea':'1'}:{}),...(old?{Authorization:'Bearer '+old}:{})},body:opt.body?JSON.stringify(opt.body):undefined})}catch(e){throw Object.assign(new Error('Sin conexión con el servidor. Revisa tu internet.'),{offline:true})}
+ const m=opt.method||(opt.body?'POST':'GET'),old=LS('pistea_t');let r;
+ // Las lecturas se reintentan solas (hasta 2 veces) si falla la red o el servidor está saturado (502/503/504); las escrituras no, para no duplicarlas
+ for(let n=0;;n++){
+  try{r=await fetch('/api/'+path,{method:m,credentials:'same-origin',headers:{'Content-Type':'application/json',...(m!=='GET'?{'X-Pistea':'1'}:{}),...(old?{Authorization:'Bearer '+old}:{})},body:opt.body?JSON.stringify(opt.body):undefined})}
+  catch(e){net(false);if(m==='GET'&&n<2){await nap(700*(n+1));continue}throw Object.assign(new Error('Sin conexión con el servidor. Revisa tu internet.'),{offline:true})}
+  if(m==='GET'&&n<2&&[502,503,504].includes(r.status)){await nap(Math.min(3000,(+r.headers.get('Retry-After')||0)*1000||700*(n+1)));continue}
+  break}
+ net(true);
  if(old&&(r.ok||r.status===401))LS('pistea_t',null);
  const j=await r.json().catch(()=>({}));
  if(r.status===401&&st.me&&!opt.auth){LS('pistea_t',null);st.me=null;st.user=null;st.err='Tu sesión ha caducado. Entra de nuevo.';st.mode='login';render();throw new Error(j.error||'Sesión caducada')}
  if(!r.ok)throw Object.assign(new Error(j.error||'Error del servidor'),{status:r.status});return j}
+const skel=(n=7)=>`<div aria-busy="true" aria-label="Cargando">${'<div class="row"><i class="sk c"></i><i class="sk l"></i><i class="sk r"></i></div>'.repeat(n)}</div>`;
 const seg=(arr,cur,fn)=>`<div class="seg">${arr.map(a=>`<button class="${a===cur?'on':''}" data-c="${fn}|${a}">${a[0].toUpperCase()+a.slice(1)}</button>`).join('')}</div>`;
 const pills=(arr,cur,fn)=>`<div class="pills">${arr.map(a=>`<button class="${a===cur?'on':''}" data-c="${fn}|${a}">${a}</button>`).join('')}</div>`;
 // La mezcla de dificultades (verde, azul, roja, negra) en proporción: las pistas que lista la ficha, con el color de la
@@ -39,21 +51,27 @@ const LVLD={debutante:'Bajo pistas verdes y voy cogiendo confianza.',intermedio:
 const MOD={ski:'Esquí',snowboard:'Snowboard',ambos:'Esquí y snowboard'};
 const TER={pista:'Pistas pisadas',carving:'Carving',baches:'Baches',park:'Snowpark',freeride:'Fuera de pista',travesia:'Travesía',competicion:'Trazado de competición'};
 const chips=u=>`<div class="chips">${u.age?`<span class="chipTag on">${u.age} años</span>`:''}<span class="chipTag on"><i style="background:var(--${(LVL[u.level]||LVL.intermedio)[1]})"></i>${(LVL[u.level]||LVL.intermedio)[0]}</span><span class="chipTag on">${MOD[u.modality]||MOD.ski}</span>${(u.terrain||[]).map(k=>TER[k]?`<span class="chipTag">${TER[k]}</span>`:'').join('')}</div>`;
-// El recorrido. Los días del motor nuevo traen [x, z, clase] en metros del mapa 3D: se dibujan encima de la miniatura de la
-// estación, que cubre la caja de estaciones.json, cada tramo con el color de su pista (el freeride en ámbar, las subidas a
-// trazos blancos). Los días antiguos, sin caja ni clases, se encajan en el recuadro como antes
-const TC=['#fff','var(--g)','var(--b)','var(--r)','var(--k)','var(--fr)','#c7d3df'];
-// fit: para la vista del día, el encuadre crece hasta que cabe todo el recorrido (un freeride lejos de las pistas se sale de la
-// miniatura) y la miniatura va dentro, en su sitio; devuelve también la proporción del encuadre
-const trkFit=(t,id)=>{const cj=SI[id].caja,m=80;let a=cj[0],b=cj[1],c=cj[2],e=cj[3];for(const p of t){a=Math.min(a,p[0]-m);b=Math.min(b,p[1]-m);c=Math.max(c,p[0]+m);e=Math.max(e,p[1]+m)}return [a,b,c,e]};
-const trkMap=(t,id,fit)=>{const cj=id&&SI[id]&&SI[id].caja;if(!cj||!t||t.length<2||!Array.isArray(t[0])||t[0].length<3)return '';let out='',d='',cur=null;
- const put=()=>{if(!d)return;const up=!cur,sw=up?1.6:cur===6?2:3.2;out+=`${up||cur===6?'':`<path d="${d}" stroke="#fff" stroke-width="${sw+2.4}" opacity=".85"/>`}<path d="${d}" stroke="${TC[cur]}" stroke-width="${sw}"${up?' stroke-dasharray="4 4" opacity=".9"':''}/>`};
+// El recorrido. Los días del motor nuevo traen [x, z, clase(, s)] en metros del mapa 3D: se dibujan sobre el relieve de la
+// estación (public/img/relieve, de scripts/gen_relieve.py), que cubre todo el terreno del 3D, cada tramo con el color de su
+// pista (el freeride en ámbar, las subidas a trazos) y encuadrados en lo recorrido. Antes iban sobre la miniatura, que en
+// las estaciones grandes no llega a todas las pistas (en Formigal, al 9 %) y quedaba en una esquina. Los días antiguos,
+// sin clases, se encajan en el recuadro como antes
+const TC=['#0f2a44','var(--g)','var(--b)','var(--r)','var(--k)','var(--fr)','#6f8399'];
+// El encuadre: lo recorrido con un margen, como poco 700 × 500 m
+const trkFit=t=>{let a=1/0,b=1/0,c=-1/0,e=-1/0;for(const p of t){a=Math.min(a,p[0]);b=Math.min(b,p[1]);c=Math.max(c,p[0]);e=Math.max(e,p[1])}
+ const m=Math.max(110,.07*Math.max(c-a,e-b)),w=Math.max(c-a+2*m,700),h=Math.max(e-b+2*m,500),x=(a+c)/2,z=(b+e)/2;return [x-w/2,z-h/2,x+w/2,z+h/2]};
+// …ensanchado a la proporción ar (ancho / alto) del hueco donde va y movido para no salirse del relieve (un recorrido junto
+// a su borde dejaba una franja sin terreno); si el relieve se queda corto, centrado en él
+const trkBox=(t,rel,ar)=>{let[a,b,c,e]=trkFit(t);const x=(a+c)/2,z=(b+e)/2;if(ar){if((c-a)/(e-b)<ar){const W=(e-b)*ar;a=x-W/2;c=x+W/2}else{const H=(c-a)/ar;b=z-H/2;e=z+H/2}}
+ const sh=(lo,hi,L,R)=>hi-lo>=R-L?(L+R-lo-hi)/2:lo<L?L-lo:hi>R?R-hi:0,dx=sh(a,c,rel[0],rel[2]),dz=sh(b,e,rel[1],rel[3]);return [a+dx,b+dz,c+dx,e+dz]};
+const trkMap=(t,id,ar)=>{const rel=id&&SI[id]&&SI[id].rel;if(!rel||!t||t.length<2||!Array.isArray(t[0])||t[0].length<3)return '';let out='',d='',cur=null;
+ const put=()=>{if(!d)return;const up=!cur,sw=up?1.6:cur===6?2:3.2;out+=`${up||cur===6?'':`<path d="${d}" stroke="#fff" stroke-width="${sw+2.4}" opacity=".9"/>`}<path d="${d}" stroke="${TC[cur]}" stroke-width="${sw}"${up?' stroke-dasharray="4 4" opacity=".75"':''}/>`};
  for(let i=1;i<t.length;i++){const c=t[i][2];if(c!==cur){put();d=`M${t[i-1][0]} ${t[i-1][1]}`;cur=c}d+=`L${t[i][0]} ${t[i][1]}`}put();
- const v=fit?trkFit(t,id):cj,img=fit?`<image href="/img/${id}.webp" x="${cj[0]}" y="${cj[1]}" width="${cj[2]-cj[0]}" height="${cj[3]-cj[1]}" preserveAspectRatio="none"/><rect x="${v[0]}" y="${v[1]}" width="${v[2]-v[0]}" height="${v[3]-v[1]}" fill="rgba(9,30,52,.3)"/>`:'';
- return `<svg viewBox="${v[0]} ${v[1]} ${v[2]-v[0]} ${v[3]-v[1]}" preserveAspectRatio="xMidYMid ${fit?'meet':'slice'}" width="100%" height="100%" fill="none" stroke-linecap="round" stroke-linejoin="round">${img}${out.replace(/<path /g,'<path vector-effect="non-scaling-stroke" ')}</svg>`};
-// El fondo de las tarjetas de un día: la miniatura, oscurecida si encima va el recorrido en color, aclarada si es uno antiguo
-const mapBg=d=>{const c=trkMap(d.track,d.station)?'rgba(9,30,52,.25)':'rgba(243,247,251,.6)';return `linear-gradient(${c},${c}),url(/img/${d.station}.webp)`};
-const trk=(t,w=300,h=120,id)=>{if(!t||t.length<2)return '';const m=trkMap(t,id);if(m)return m;const xs=t.map(p=>p[0]),ys=t.map(p=>p[1]),mx=Math.max(...xs)||1,my=Math.max(...ys)||1,d=t.map((p,i)=>(i?'L':'M')+(12+p[0]/mx*(w-24)).toFixed(1)+' '+(12+p[1]/my*(h-24)).toFixed(1)).join('');return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><path class="trk" d="${d}" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`};
+ const v=trkBox(t,rel,ar);
+ return `<svg viewBox="${v[0]} ${v[1]} ${v[2]-v[0]} ${v[3]-v[1]}" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" fill="none" stroke-linecap="round" stroke-linejoin="round"><image href="/img/relieve/${id}.webp" x="${rel[0]}" y="${rel[1]}" width="${rel[2]-rel[0]}" height="${rel[3]-rel[1]}" preserveAspectRatio="none"/>${out.replace(/<path /g,'<path vector-effect="non-scaling-stroke" ')}</svg>`};
+// El fondo de las tarjetas de un día: el tono del relieve mientras llega o, en uno antiguo, la miniatura aclarada
+const mapBg=d=>trkMap(d.track,d.station)?'linear-gradient(#e3eaf1,#e3eaf1)':`linear-gradient(rgba(243,247,251,.6),rgba(243,247,251,.6)),url(/img/${d.station}.webp)`;
+const trk=(t,w=300,h=120,id)=>{if(!t||t.length<2)return '';const m=trkMap(t,id,w/h);if(m)return m;const xs=t.map(p=>p[0]),ys=t.map(p=>p[1]),mx=Math.max(...xs)||1,my=Math.max(...ys)||1,d=t.map((p,i)=>(i?'L':'M')+(12+p[0]/mx*(w-24)).toFixed(1)+' '+(12+p[1]/my*(h-24)).toFixed(1)).join('');return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%"><path class="trk" d="${d}" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`};
 
 // ---------- sesión ----------
 function authView(){const m=st.mode,info=st.info?`<div style="color:var(--g);font-size:14px;font-weight:500;margin:12px 0 0">${esc(st.info)}</div>`:'';
@@ -82,7 +100,7 @@ async function logoutAll(){if(!confirm('Se cerrará la sesión en todos tus disp
 function changePw(){ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Seguridad</div><h1>Cambiar contraseña</h1></div><form data-s="savePw|@e"><label>Contraseña actual</label><input id="cp-old" type="password" autocomplete="current-password" required maxlength="128"><label>Contraseña nueva (mín. 8 caracteres)</label><input id="cp-new" type="password" autocomplete="new-password" minlength="8" maxlength="128" required><div class="err" id="cp-er"></div><button class="btn" id="cp-sb">Guardar</button></form><small style="display:block;margin-top:12px">Se cerrará la sesión en tus otros dispositivos.</small>`)}
 async function savePw(e){e.preventDefault();$('#cp-sb').disabled=true;try{await api('password',{body:{old:$('#cp-old').value,password:$('#cp-new').value}});ov0();flash('Contraseña cambiada.')}catch(x){$('#cp-er').textContent=x.message;$('#cp-sb').disabled=false}return false}
 async function delAccount(){const pw=prompt('Se borrarán tu cuenta, fotos y todos tus días conforme al Derecho al Olvido (RGPD). Escribe tu contraseña para confirmar:');if(!pw)return;try{await api('me',{method:'DELETE',body:{password:pw}});logout(true)}catch(e){flash(e.message)}}
-function flash(t){const d=document.createElement('div');d.className='toast';d.style.cssText='position:absolute;left:20px;right:20px;top:14px;z-index:20';d.textContent=t;$('#app').appendChild(d);setTimeout(()=>d.remove(),3500)}
+function flash(t){const d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.style.cssText='position:absolute;left:20px;right:20px;top:14px;z-index:20';d.textContent=t;$('#app').appendChild(d);setTimeout(()=>d.remove(),3500)}
 async function boot(){st.loading=true;st.offline=false;try{await refresh();st.rec=recLoad();if(NAT&&st.rec&&st.rec.native)NAT.status().then(x=>{st.recRun=!!x.recording;render()}).catch(()=>{});st.err=''}catch(x){st.me=null;if(x.offline)st.offline=true;else if(!/sesión|Sesión/.test(x.message))st.err=x.message}st.loading=false;render();if(st.me&&!st.user.onboarded&&!$('.ov'))onb(0)}   // cuenta sin ficha: el alta guiada, una vez
 async function refresh(){const m=await api('me',{auth:true});const[s,f,pp,sg]=await Promise.all([api('stations'),api(feedQ()),api('passport').catch(()=>null),api('suggest').catch(()=>[])]);st.me=m;st.user=m.user;st.stats=s;st.feed=f;st.soc=m.social||{unseen:0,requests:0};st.sug=sg;if(pp)PP=pp;socStart()}
 
@@ -96,7 +114,7 @@ est(){const zs=['Todas',...new Set(S.map(s=>s.z))],l=S.filter(s=>st.flt==='Todas
   <div class="pass-foot"><span>${esc(st.user.alias)}</span><span class="pass-code" aria-hidden="true"></span></div></section>
  <div class="tiles"><div class="tile">${ic('rec')}<div><b>${lg.tier?'Liga '+lg.tier:'Liga semanal'}</b><small>${lg.tier?`Puesto ${lg.pos} de ${lg.total} esta semana`:'Graba un día para entrar'}</small></div></div><div class="tile">${ic('flame')}<div><b>${st.me.streak} ${st.me.streak===1?'semana':'semanas'}</b><small>${st.me.streak?'de racha seguida':'Empieza tu racha esta semana'}</small></div></div></div>
  ${wrCard()}${pills(zs,st.flt,'setF')}<div class="grid">${l.map(s=>stCard(s)).join('')}</div>`},
-rec(){const r=st.rank;if(!r)return `<div class="top"><h1>Récords</h1></div><div class="empty">Cargando…</div>`;
+rec(){const r=st.rank;if(!r)return `<div class="top"><h1>Récords</h1></div>${skel()}`;
  const rows=r.rows.map(x=>`<div class="row ${x.me?'me':''}"><span class="pos">${x.pos}</span>${av(x.alias,x.avatar)}<b style="font-weight:600">${esc(x.alias)}</b><span class="val">${show(st.met,x.v)}</span></div>`).join('');
  return `<div class="top"><h1>Récords</h1></div>
  <div class="tabs">${Object.keys(MET).map(k=>`<button class="${k===st.met?'on':''}" data-c="setM|${k}">${MET[k]}</button>`).join('')}</div>
@@ -108,7 +126,7 @@ rec(){const r=st.rank;if(!r)return `<div class="top"><h1>Récords</h1></div><div
 com(){const f=st.feed,head=`<div class="top tw"><h1>Comunidad</h1>${bellBtn()}</div>${reqBanner()}${seg(['Amigos','España','Buscar'],st.scope,'setS')}`;
  if(st.scope==='Buscar')return head+`<input id="q" placeholder="Buscar esquiadores por nombre" data-i="search|@v" value="${esc(st.q||'')}"><div id="res" style="margin-top:12px">${resHtml()}</div>`;
  return head+(st.scope==='Amigos'?sugHtml():'')+(f.length?f.map(d=>`<div class="card"><div style="display:flex;gap:12px;align-items:center;cursor:pointer" data-c="profile|${d.uid}">${av(d.alias,d.avatar)}<div><b style="font-weight:600">${esc(d.alias)}</b><br><small>${esc(SM[d.station].n)}, ${ago(d.ts).toLowerCase()}</small></div></div>
- <div class="map" style="height:170px;cursor:pointer;background-image:${mapBg(d)}" data-c="dayView|${d.id}" role="button" tabindex="0" aria-label="Ver el día">${trk(d.track,300,120,d.station)}</div>
+ <div class="map" style="height:170px;cursor:pointer;background-image:${mapBg(d)}" data-c="dayView|${d.id}" role="button" tabindex="0" aria-label="Ver el día">${trk(d.track,320,170,d.station)}</div>
  <div class="kpis" style="margin-bottom:12px"><div><b>${fmt(d.desnivel)}</b><small>m desnivel</small></div><div><b>${dec(d.km)}</b><small>km</small></div><div><b>${d.bajadas}</b><small>bajadas</small></div></div>${d.freeride>=0.05?`<span class="fr-tag" style="margin:-2px 0 12px">${dec(d.freeride)} km de freeride</span><br>`:''}
  <button class="kudo ${d.liked?'on':''}"${d.uid===st.user.id?' disabled title="Tus días reciben apoyos; tú no te los das"':` data-c="kudo|${d.id}|@"`}>${ic('heart')} <span>${d.kudos}</span> ${d.kudos===1?'apoyo':'apoyos'}</button>${d.uid!==st.user.id?`<button class="link" style="float:right;color:var(--mu);font-size:12.5px;margin-top:8px" data-c="reportUser|${d.uid}|${d.id}">Denunciar</button>`:''}</div>`).join(''):`<div class="empty">${st.scope==='Amigos'?'Tus amigos no han esquiado aún. Busca esquiadores y sigue a más gente.':'Aún no hay actividad.'}</div>`)},
 yo(){const t=st.me.totals,vis=st.me.stations,days=st.me.days,u=st.user;
@@ -133,15 +151,21 @@ yo(){const t=st.me.totals,vis=st.me.stations,days=st.me.days,u=st.user;
  <p style="display:flex;justify-content:center;gap:18px;margin:18px 0 12px;font-size:14px"><a href="/privacidad" target="_blank" rel="noopener" style="color:var(--mu)">Privacidad</a><a href="/condiciones" target="_blank" rel="noopener" style="color:var(--mu)">Condiciones</a><a href="/normas" target="_blank" rel="noopener" style="color:var(--mu)">Normas</a><a href="/aviso-legal" target="_blank" rel="noopener" style="color:var(--mu)">Aviso legal</a><a href="/licencias" target="_blank" rel="noopener" style="color:var(--mu)">Licencias</a></p>
  <button class="btn dg" data-c="delAccount">Eliminar cuenta y datos</button>`}
 };
+let lastTab='';
 function render(){
  document.body.classList.toggle('out',!st.me);   // sin sesión: la foto a toda pantalla
  if(st.loading&&!st.me){$('#m').innerHTML=`<div class="auth"><header class="auth-hero" style="display:grid;place-content:center;justify-items:center;gap:10px"><div class="logo">${ic('est')} Pistea</div><small style="color:#fff">Cargando…</small></header></div>`;$('#nav').style.display='none';return}
  if(st.offline&&!st.me){$('#m').innerHTML=`<div class="auth"><header class="auth-hero"><div class="logo">${ic('est')} Pistea</div></header><section class="auth-sheet"><h1>Sin conexión</h1><p class="mu" style="margin:8px 0 20px">No llegamos al servidor. Tu sesión sigue abierta: en cuanto vuelva la conexión entras directamente.</p><button class="btn" data-c="boot">Reintentar</button></section></div>`;$('#nav').style.display='none';return}
  if(!st.me){$('#m').innerHTML=authView();$('#nav').style.display='none';mountCaptcha();return}
- $('#nav').style.display='';$('#m').innerHTML=(st.toast?`<div class="toast">${esc(st.toast)}</div>`:'')+V[st.tab]();
- $('#nav').innerHTML=[['est','Estaciones'],['com','Comunidad'],['go','Traquear'],['rec','Récords'],['yo','Perfil']].map(t=>t[0]==='go'?`<button class="go" data-c="elegir" aria-label="Traquear">${ic('go')}</button>`:`<button class="${t[0]===st.tab?'on':''}" data-c="tab|${t[0]}">${ic(t[0])}${t[1]}${t[0]==='com'&&badgeN()?'<i class="nd" aria-hidden="true"></i>':''}</button>`).join('');lazyBg()}
+ $('#nav').style.display='';
+ // Al repintar, la pestaña conserva el scroll, el de las filas de píldoras y el campo que se estaba escribiendo (no vuelve arriba ni pierde el foco)
+ const m=$('#m'),keep=lastTab===st.tab?{y:m.scrollTop,pl:[...m.querySelectorAll('.pills,.seg')].map(e=>e.scrollLeft),f:(document.activeElement&&m.contains(document.activeElement)&&document.activeElement.id)||''}:null;lastTab=st.tab;
+ m.innerHTML=(st.toast?`<div class="toast">${esc(st.toast)}</div>`:'')+V[st.tab]();
+ if(keep){m.scrollTop=keep.y;m.querySelectorAll('.pills,.seg').forEach((e,i)=>{if(keep.pl[i])e.scrollLeft=keep.pl[i]});const f=keep.f&&document.getElementById(keep.f);if(f&&f.focus)f.focus({preventScroll:true})}
+ $('#nav').innerHTML=[['est','Estaciones'],['com','Comunidad'],['go','Traquear'],['rec','Récords'],['yo','Perfil']].map(t=>t[0]==='go'?`<button class="go" data-c="elegir" aria-label="Traquear">${ic('go')}</button>`:`<button class="${t[0]===st.tab?'on':''}"${t[0]===st.tab?' aria-current="page"':''} data-c="tab|${t[0]}">${ic(t[0])}${t[1]}${t[0]==='com'&&badgeN()?'<i class="nd" aria-hidden="true"></i>':''}</button>`).join('');lazyBg()}
 async function loadRank(){const my=++rq,q=new URLSearchParams({metric:st.met,period:st.per});if(st.amb!=='España'){const id=S.find(s=>s.n===st.amb).id;q.set('station',id);if(!st.rk2||st.rk2.id!==id){st.rk2=null;api('records?station='+id).then(r=>{if(st.amb===SM[id].n){st.rk2=Object.assign(r,{id});if(st.tab==='rec')render()}}).catch(()=>{})}}st.rank=null;if(st.tab==='rec')render();try{const r=await api('rank?'+q);if(my!==rq)return;st.rank=r}catch(e){flash(e.message)}render();pillIn()}
-async function tab(t){st.tab=t;st.toast=0;render();$('#m').scrollTop=0;if(t==='rec'){st.rk2=null;loadRank();pillIn()}else if(t!=='yo'){try{await refresh();render()}catch(e){}}}
+async function tab(t){if(!hOv&&!hSkip){if(t!=='est'&&!hTab)hTab=hPush({tab:1});else if(t==='est'&&hTab){hTab=false;hSkip++;history.back()}}
+ st.tab=t;st.toast=0;render();$('#m').scrollTop=0;if(t==='rec'){st.rk2=null;loadRank();pillIn()}else if(t!=='yo'){try{await refresh();render()}catch(e){}}}
 // La estación elegida en Récords, a la vista en su fila de píldoras (si no, con 28 estaciones se queda fuera de pantalla)
 const pillIn=()=>requestAnimationFrame(()=>{const b=[...document.querySelectorAll('#m .pills button.on')].pop();if(b&&b.textContent!=='España')b.scrollIntoView({block:'nearest',inline:'center'})});
 const setF=a=>{st.flt=a;render()},setS=async a=>{st.scope=a;render();if(a!=='Buscar'){try{st.feed=await api(feedQ());render()}catch(e){}}},setP=a=>{st.per=a;loadRank()},setA=a=>{st.amb=a;loadRank()},setM=a=>{st.met=a;loadRank()};
@@ -151,10 +175,12 @@ function search(v){st.q=v;clearTimeout(qt);qt=setTimeout(async()=>{try{st.users=
 // Un mismo botón para seguir, pedir seguir (cuentas que aprueban a sus seguidores), cancelar la solicitud y dejar de seguir
 const fLabel=(on,req,ap)=>on?'Siguiendo':req?'Solicitado':ap?'Solicitar':'Seguir';
 const fBtn=(u,cls='kudo',pf='')=>{const on=u.iFollow||u.following,req=u.requested;return u.me?'':`<button class="${cls} ${on||req?'on':''}" data-c="follow|${u.id}|@" data-ap="${u.approve?1:''}"${pf}>${fLabel(on,req,u.approve)}</button>`};
-async function follow(id,b){try{const r=await api('follow',{body:{id}});b.textContent=fLabel(r.following,r.requested,b.dataset.ap==='1');b.classList.toggle('on',r.following||r.requested);
+async function follow(id,b){const was=b.textContent,wasOn=b.classList.contains('on'),ap=b.dataset.ap==='1',nowOn=!wasOn;   // optimista: el botón cambia ya y vuelve atrás si falla
+  b.textContent=nowOn?(ap?'Solicitado':'Siguiendo'):fLabel(false,false,ap);b.classList.toggle('on',nowOn);
+  try{const r=await api('follow',{body:{id}});b.textContent=fLabel(r.following,r.requested,b.dataset.ap==='1');b.classList.toggle('on',r.following||r.requested);
   const o=b.dataset.pf?$('.ov'):null;if(o)profile(id,b.dataset.from||'',o.scrollTop);
   else if(st.tab==='yo'||st.tab==='com')api('me',{auth:true}).then(m=>{st.me=m;st.soc=m.social||st.soc;if(st.tab==='yo'&&!$('.ov'))render();paintBadges()}).catch(()=>{});
-  if(r.requested)flash('Solicitud enviada. Te avisaremos cuando la acepte.')}catch(e){flash(e.message)}}
+  if(r.requested)flash('Solicitud enviada. Te avisaremos cuando la acepte.')}catch(e){b.textContent=was;b.classList.toggle('on',wasOn);flash(e.message)}}
 const badgeN=()=>((st.soc||{}).unseen||0)+((st.soc||{}).requests||0);
 const bellBtn=()=>{const n=badgeN();return `<button class="bell" data-c="activity" aria-label="Actividad${n?`, ${n} sin ver`:''}">${ic('bell')}${n?`<span class="nb">${n>9?'9+':n}</span>`:''}</button>`};
 const reqBanner=()=>{const n=(st.soc||{}).requests||0;return n?`<button class="card reqb" data-c="activity">${ic('com')}<div><b>${n} ${n===1?'solicitud':'solicitudes'} para seguirte</b><small>Acéptalas o recházalas</small></div><span>Ver</span></button>`:''};
@@ -204,7 +230,7 @@ async function profile(id,from,y){try{const u=await api('user?id='+id),mine=st.u
  ${u.me?'':`${u.followsMe||u.approve?`<div class="fw">${u.followsMe?'<span class="chipTag">Te sigue</span>':''}${u.approve?'<span class="chipTag">Aprueba a sus seguidores</span>':''}</div>`:''}<button class="btn ${u.following||u.requested?'gh':''}" data-c="follow|${u.id}|@" data-ap="${u.approve?1:''}" data-pf="1" data-from="${from||''}">${fLabel(u.following,u.requested,u.approve)}</button>${u.approve&&!u.following&&!u.requested?'<small class="fnote">Esta cuenta aprueba a sus seguidores: tendrá que aceptar tu solicitud.</small>':''}`}
  ${both.length?`<div class="card match" style="margin-top:12px">${ic('star')}<div><b>Los dos queréis ir a ${list(both.map(x=>esc(SM[x].n)))}</b><br><small>Está en vuestras listas de esta temporada.</small></div></div>`:''}
  ${u.totals?`<div class="kpis" style="margin-top:14px"><div><b>${fmt(u.totals.desnivel)}</b><small>m desnivel</small></div><div><b>${fmt(u.totals.km)}</b><small>km</small></div><div><b>${fmt(u.totals.bajadas)}</b><small>bajadas</small></div></div>`:''}
- <h2>Últimos días</h2>${u.daysHidden?`<div class="empty">${u.vis==='yo'?'Esta persona no comparte sus días.':'Sus días solo los ven sus seguidores.'}</div>`:u.days.length?u.days.map(d=>`<div class="card" style="cursor:pointer" data-c="dayView|${d.id}" role="button" tabindex="0"><b style="font-weight:600">${esc(SM[d.station].n)}</b> <small>${ago(d.ts).toLowerCase()}</small><div class="map" style="height:120px;background-image:${mapBg(d)}">${trk(d.track,300,90,d.station)}</div><small>${fmt(d.desnivel)} m de desnivel, ${d.bajadas} bajadas${d.freeride>=0.05?`, ${dec(d.freeride)} km de freeride`:''}</small></div>`).join(''):'<div class="empty">Sin días todavía.</div>'}${u.me?'':`<div style="display:flex;gap:22px;justify-content:center;margin:22px 0 6px"><button class="link" style="color:var(--mu)" data-c="reportUser|${u.id}">Denunciar</button><button class="link" style="color:var(--r)" data-c="blockUser|${u.id}">Bloquear</button></div>`}`);if(y)$('.ov').scrollTop=+y}catch(e){flash(e.message)}}
+ <h2>Últimos días</h2>${u.daysHidden?`<div class="empty">${u.vis==='yo'?'Esta persona no comparte sus días.':'Sus días solo los ven sus seguidores.'}</div>`:u.days.length?u.days.map(d=>`<div class="card" style="cursor:pointer" data-c="dayView|${d.id}" role="button" tabindex="0"><b style="font-weight:600">${esc(SM[d.station].n)}</b> <small>${ago(d.ts).toLowerCase()}</small><div class="map" style="height:120px;background-image:${mapBg(d)}">${trk(d.track,300,120,d.station)}</div><small>${fmt(d.desnivel)} m de desnivel, ${d.bajadas} bajadas${d.freeride>=0.05?`, ${dec(d.freeride)} km de freeride`:''}</small></div>`).join(''):'<div class="empty">Sin días todavía.</div>'}${u.me?'':`<div style="display:flex;gap:22px;justify-content:center;margin:22px 0 6px"><button class="link" style="color:var(--mu)" data-c="reportUser|${u.id}">Denunciar</button><button class="link" style="color:var(--r)" data-c="blockUser|${u.id}">Bloquear</button></div>`}`);if(y)$('.ov').scrollTop=+y}catch(e){flash(e.message)}}
 function reportUser(target,day){ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Denunciar</div><h1>¿Qué ocurre?</h1></div><form data-s="sendReport|@e|${target}|${day||''}">${[['spam','Spam o publicidad'],['ofensivo','Nombre, foto o texto ofensivo'],['trampas','Datos falsos o trampas en el ranking'],['suplantacion','Se hace pasar por otra persona'],['privacidad','Publica datos privados de alguien'],['otro','Otro motivo']].map(([v,l],i)=>`<label style="display:flex;gap:10px;align-items:center;color:var(--tx);margin:12px 0;font-size:15px"><input type="radio" name="rr" value="${v}" style="width:auto"${i?'':' required'}> ${l}</label>`).join('')}<label>Detalles (opcional)</label><textarea id="rn" maxlength="300" style="width:100%;min-height:80px;background:var(--s1);border:1px solid var(--ln);border-radius:10px;padding:12px;color:var(--tx);font:inherit"></textarea><div class="err" id="r-er"></div><button class="btn" id="r-sb">Enviar denuncia</button></form><small style="display:block;margin-top:12px">La revisa una persona. Quien denuncias no sabe que has sido tú. Si te molesta, también puedes bloquearlo.</small>`)}
 async function sendReport(e,target,day){e.preventDefault();const r=document.querySelector('input[name=rr]:checked');if(!r)return false;$('#r-sb').disabled=true;try{await api('report',{body:{target,day:day||undefined,reason:r.value,note:$('#rn').value}});ov0();flash('Gracias. Revisaremos la denuncia.')}catch(x){$('#r-er').textContent=x.message;$('#r-sb').disabled=false}return false}
 async function blockUser(id){if(!confirm('¿Bloquear a este usuario? No os veréis en la comunidad, la búsqueda ni los perfiles, y dejaréis de seguiros.'))return;try{await api('block',{body:{id}});ov0();flash('Usuario bloqueado. Puedes desbloquearlo desde tu perfil.');try{st.feed=await api(feedQ());render()}catch(e){}}catch(e){flash(e.message)}}
@@ -213,7 +239,9 @@ async function unblock(id,b){try{await api('block',{body:{id}});b.closest('.row'
 const RSN={spam:'Spam',ofensivo:'Ofensivo',trampas:'Trampas',suplantacion:'Suplantación',privacidad:'Privacidad',otro:'Otro'};
 async function moderation(){try{const l=await api('admin/reports');ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Moderación</div><h1>Denuncias abiertas</h1></div>${l.length?l.map(r=>`<div class="card"><div style="display:flex;gap:12px;align-items:center">${av(r.alias,r.avatar)}<div><b style="font-weight:600">${esc(r.alias)}</b>${r.hidden?' <span class="chipTag">oculto</span>':''}${r.banned?' <span class="chipTag">suspendido</span>':''}<br><small>${RSN[r.reason]||esc(r.reason)} · ${r.n} ${r.n===1?'persona':'personas'} · ${ago(r.ts)} · de ${esc(r.reporter||'—')}</small></div></div>${r.bio?`<p class="mu" style="margin-top:8px">"${esc(r.bio)}"</p>`:''}${r.note?`<p style="margin-top:8px">${esc(r.note)}</p>`:''}${r.day&&r.km!=null?`<small style="display:block;margin-top:8px">Día en ${esc((SM[r.station]||{n:'?'}).n)}: ${fmt(r.desnivel)} m · ${dec(r.km)} km · ${r.bajadas} bajadas · ${Math.round(r.vmax)} km/h máx</small>`:''}<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">${[['descartar','Descartar'],...(r.day?[['quitar_dia','Quitar el día']]:[]),['limpiar_perfil','Limpiar perfil'],['suspender','Suspender cuenta']].map(([a,t])=>`<button class="kudo" data-c="resolveRep|${r.id}|${a}">${t}</button>`).join('')}</div></div>`).join(''):'<div class="empty">No hay denuncias pendientes.</div>'}`)}catch(e){flash(e.message)}}
 async function resolveRep(id,action){if(action==='suspender'&&!confirm('¿Suspender esta cuenta? No podrá entrar y desaparece de la app.'))return;try{await api('admin/resolve',{body:{id,action}});flash('Hecho.');moderation()}catch(e){flash(e.message)}}
-async function kudo(id,b){try{const r=await api('kudos',{body:{id}});b.classList.toggle('on',r.liked);b.querySelector('span').textContent=r.kudos;b.lastChild.textContent=r.kudos===1?' apoyo':' apoyos'}catch(e){flash(e.message)}}
+async function kudo(id,b){const sp=b.querySelector('span'),was=b.classList.contains('on'),n0=+sp.textContent||0,paint=(on,n)=>{b.classList.toggle('on',on);sp.textContent=n;b.lastChild.textContent=n===1?' apoyo':' apoyos'};
+ paint(!was,Math.max(0,n0+(was?-1:1)));   // optimista
+ try{const r=await api('kudos',{body:{id}});paint(r.liked,r.kudos)}catch(e){paint(was,n0);flash(e.message)}}
 function pickAvatar(input){const f=input.files&&input.files[0];if(!f)return;if(!/^image\/(jpeg|png|webp)$/i.test(f.type)){flash('Solo se admiten fotos JPEG, PNG o WebP.');return}const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=async ()=>{const c=document.createElement('canvas'),s=Math.min(img.width,img.height);c.width=300;c.height=300;c.getContext('2d').drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,300,300);try{const res=await api('avatar',{body:{image:c.toDataURL('image/webp',0.85)}});st.user.avatar=res.avatar;if(st.drView)drPaint();render();flash('Foto de perfil actualizada.')}catch(err){flash(err.message)}};img.src=e.target.result};r.readAsDataURL(f)}
 // ---------- ficha de esquiador ----------
 // El alta guiada (tras crear la cuenta) y Editar perfil usan las mismas piezas (FD) sobre un borrador (st.dr) que se guarda con
@@ -315,7 +343,7 @@ async function delAvatar(){if(!confirm('¿Eliminar tu foto de perfil?'))return;t
 async function exportData(){try{const res=await fetch('/api/me/export',{credentials:'same-origin'});if(!res.ok)throw new Error('Error al descargar');const b=await res.blob(),url=URL.createObjectURL(b),a=document.createElement('a');a.href=url;a.download=`pistea-datos-${st.user.alias.replace(/[^a-zA-Z0-9]/g,'')}.json`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);flash('Datos descargados en formato oficial JSON.')}catch(e){flash(e.message)}}
 // Una ficha encima de la pestaña: es un diálogo (para los lectores de pantalla) y recibe el foco, salvo si ya estaba dentro
 // (al repintar la misma ficha, como en los récords de una pista)
-function ov(h){clearInterval(T);stopW();const o=$('.ov'),had=o&&o.contains(document.activeElement);if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov" role="dialog" aria-modal="true" tabindex="-1"><button class="x" data-c="ov0" aria-label="Cerrar">${ic('x')}</button>${h}</div>`);lazyBg();
+function ov(h){if(!hOv&&!hWant){if(hSkip>0)hWant=true;else hPush()}clearInterval(T);stopW();const o=$('.ov'),had=o&&o.contains(document.activeElement);if(o)o.remove();$('#app').insertAdjacentHTML('beforeend',`<div class="ov" role="dialog" aria-modal="true" tabindex="-1"><button class="x" data-c="ov0" aria-label="Cerrar">${ic('x')}</button>${/class="(?:x bk|link back)"/.test(h)||/class="speed"/.test(h)?'':`<button class="x bkd" data-c="ov0" aria-label="Volver">${ic('back')}</button>`}${h}</div>`);lazyBg();
  const n=$('.ov'),t=n&&n.querySelector('h1');if(n){if(t)n.setAttribute('aria-label',t.textContent);if(!had)n.focus({preventScroll:true})}}
 function ficha(i){const s=SM[i],info=st.stats[i]||{leaders:[],skiers:0};st.fi=i;st.pf='';st.pall=false;
  const fc=FC[i];ov(`<div class="photo" style="background-image:${photo(i)}"><div class="eyebrow">${s.z}</div><h1>${s.n}</h1></div>${fc&&fc.ia?`<p class="credit">Imagen ilustrativa generada con IA: no es una foto real de la estación.</p>`:fc?`<p class="credit">${fc.ambiente?"Imagen de ambiente de la zona, no de la estación. ":""}Foto: ${esc(fc.autor)}, ${esc(fc.licencia)}, <a href="${esc(fc.url)}" target="_blank" rel="noopener">${esc(fc.fuente||'Wikimedia Commons')}</a></p>`:''}
@@ -371,7 +399,7 @@ function ppView(id){const s=SM[id],x=ppStat(id),pct=x.total?Math.round(x.done/x.
  ${done.length?`<h2>Selladas (${done.length})</h2><div class="psts">${done.map(p=>row(p,x.got.get(p[0]))).join('')}</div>`:''}
  <button class="btn gh" data-c="ficha|${id}">Ficha de ${esc(s.n)}</button>`)}
 // Ficha de una pista: si está sellada y quién más la ha bajado esta temporada (no hay clasificación de velocidad)
-async function pisteView(i,name){const s=SM[i];if(!s)return;ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">${esc(s.n)}</div><h1>${esc(name)}</h1></div><div class="empty">Cargando…</div>`);
+async function pisteView(i,name){const s=SM[i];if(!s)return;ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">${esc(s.n)}</div><h1>${esc(name)}</h1></div>${skel()}`);
  try{const r=await api('piste?'+new URLSearchParams({station:i,name}));st.pv={i,name,r};pvPaint()}catch(e){flash(e.message)}}
 function pvPaint(){const{i,name,r}=st.pv,s=SM[i],c=r.c||(PI[i]||[]).reduce((a,p)=>p[0]===name?p[1]:a,'a'),m=r.mine,L=r.runs,pos=r.me.posN,it=c==='i'||c==='f';
  const rows=L.map(x=>`<div class="row ${x.me?'me':''}"><span class="pos ${x.pos===1?'crown':''}">${x.pos===1?ic('crown'):x.pos}</span>${av(x.alias,x.avatar)}<b style="font-weight:600">${esc(x.alias)}</b><span class="val">${x.v+' '+(x.v===1?'bajada':'bajadas')}</span></div>`).join('');
@@ -389,7 +417,7 @@ function pvPaint(){const{i,name,r}=st.pv,s=SM[i],c=r.c||(PI[i]||[]).reduce((a,p)
  if(sc&&$('.ov'))$('.ov').scrollTop=sc}
 // Récords de una estación en la pestaña Récords: quien más ha bajado cada pista
 function recPistes(){const r=st.rk2,s=S.find(x=>x.n===st.amb);if(!s)return '';
- if(!r)return `<h2>Récords por pista</h2><div class="empty">Cargando…</div>`;
+ if(!r)return `<h2>Récords por pista</h2>${skel()}`;
  return `<h2>Récords por pista</h2><p class="mu" style="margin:-4px 0 10px;font-size:14px">Quien más ha bajado cada pista esta temporada. Toca una para ver su clasificación.</p>`+(r.length?`<div class="card" style="padding:2px 14px">${r.map(x=>`<button class="pst rec" data-c="pisteView|${s.id}|${esc(x.name)}"><i class="sg" style="--c:${pcol(x.c)}"></i><span>${esc(x.name)}</span><small class="${x.n.me?'mine':''}">${x.n.me?ic('crown'):''}${esc(x.n.me?'Tú':x.n.alias)} · <b>${x.n.n} ${x.n.n===1?'bajada':'bajadas'}</b></small></button>`).join('')}</div>`
   :`<div class="empty">Aún no hay récords en ${esc(s.n)}. Graba un día y estrena los suyos.</div>`)}
 // ---------- Tu temporada: la temporada en historias (GET /api/wrapped). No se llama «Wrapped» para no rozar la marca de Spotify ----------
@@ -423,7 +451,7 @@ function wrSlides(d){const SN=id=>esc((SM[id]||{n:id}).n),out=[],add=(k,h,s='')=
  add('nv',`<div class="wr-e">Pistea · Tu temporada ${y}-${String(y+1).slice(2)}</div><div class="wr-h">${esc(d.alias)}</div><div class="wr-card"><div><b>${fmt(d.desnivel)}</b><small>m de desnivel</small></div><div><b>${d.dias}</b><small>${d.dias===1?'día':'días'}</small></div><div><b>${fmt(d.km)}</b><small>km</small></div><div><b>${Math.round(d.vmax)}</b><small>km/h máx.</small></div></div><div class="wr-t">Eres <b>${pe[0]}</b>${d.fav?` · tu pista, <b>${esc(d.fav.name)}</b>`:''}</div>
   <button class="btn go" data-c="wrShare">Compartir mi temporada</button><button class="btn gh wr-again" data-c="wrAgain">Ver otra vez</button>`);
  return out}
-async function wrapped(){try{const d=await api('wrapped');if(d.empty){flash('Graba tu primer día de esta temporada y aquí tendrás tu resumen.');return}st.wr={d,i:0,s:wrSlides(d)};wrShow()}catch(e){flash(e.message)}}
+async function wrapped(){try{const d=await api('wrapped');if(d.empty){flash('Graba tu primer día de esta temporada y aquí tendrás tu resumen.');return}st.wr={d,i:0,s:wrSlides(d)};wrShow();hPush({wr:1})}catch(e){flash(e.message)}}
 // Cada historia dura WR_MS; mantener pulsado la pausa (como en cualquier app de historias) y una pulsación larga no pasa de
 // historia. También se pausa si la app queda en segundo plano
 const WR_MS=7000;let WS=0,WR=WR_MS;
@@ -444,7 +472,7 @@ function wrShow(){clearTimeout(WT);const w=st.wr,old=$('#wr');if(old)old.remove(
  const e=$('#wr');if(e&&!e.contains(document.activeElement))e.focus({preventScroll:true});wrRun(WR_MS)}
 function wrNext(){const w=st.wr;if(w&&w.i<w.s.length-1){w.i++;wrShow()}}
 function wrPrev(){const w=st.wr;if(w&&w.i>0){w.i--;wrShow()}}
-function wrClose(){clearTimeout(WT);const e=$('#wr');if(e)e.remove();st.wr=null}
+function wrClose(){clearTimeout(WT);const e=$('#wr');if(e)e.remove();st.wr=null;if(history.state&&history.state.wr){hSkip++;history.back()}}
 function wrAgain(){if(st.wr){st.wr.i=0;wrShow()}}
 // La tarjeta para compartir (1080 × 1920, como las historias)
 async function wrShare(){const d=st.wr&&st.wr.d;if(!d)return;const c=document.createElement('canvas');c.width=1080;c.height=1920;const g=c.getContext('2d'),pe=persona(d),y=new Date(d.since).getUTCFullYear();
@@ -465,14 +493,31 @@ const wrCard=()=>st.me&&st.me.seasonDays>0?`<button class="wrc" data-c="wrapped"
 // Mapa 3D a pantalla completa. Va en el documento, fuera de #app, para usar todo el ancho. Deja una entrada en el historial para
 // que «atrás» (también el del móvil) lo cierre; el motor no añade las suyas (sus fichas se cierran con su propio botón), o su
 // «atrás» al cerrar una pista se llevaría también esa entrada y cerraría el mapa entero.
-function open3d(i,p){const s=SM[i];if(!s)return;const old=$('#v3d');if(old)old.remove();const q=new URLSearchParams({estacion:i});if(p)q.set('pista',p);
- document.body.insertAdjacentHTML('beforeend',`<div id="v3d" role="dialog" aria-modal="true" aria-label="Mapa 3D de ${esc(s.n)}"><header><button class="v3d-back" data-c="close3d" aria-label="Volver a ${esc(s.n)}">${ic('back')}<span>${esc(s.n)}</span></button><button class="v3d-go" data-c="go3d|${i}">${ic('go')}Grabar aquí</button></header><iframe src="${esc(st.maps||'/3d/')}?${q}" title="Mapa 3D de ${esc(s.n)}" allow="fullscreen; geolocation"></iframe></div>`);
+// rec: { t } para repasar un día (rec3d): la vista con ?recorrido=1, sin «Grabar aquí» y con el panel del repaso debajo
+function open3d(i,p,rec){const s=SM[i];if(!s)return;const old=$('#v3d');if(old)old.remove();const q=new URLSearchParams({estacion:i});if(p)q.set('pista',p);if(rec&&rec.t)q.set('recorrido','1');else RP=null;
+ const back=rec&&rec.t?esc(rec.t):esc(s.n);
+ document.body.insertAdjacentHTML('beforeend',`<div id="v3d" role="dialog" aria-modal="true" aria-label="${rec&&rec.t?`${back} en el mapa 3D`:`Mapa 3D de ${esc(s.n)}`}"><header><button class="v3d-back" data-c="close3d" aria-label="Volver a ${rec&&rec.t?'la ficha del día':esc(s.n)}">${ic('back')}<span>${back}</span></button>${rec&&rec.t?`<span class="v3d-st">${esc(s.n)}</span>`:`<button class="v3d-go" data-c="go3d|${i}">${ic('go')}Grabar aquí</button>`}</header><iframe src="${esc(st.maps||'/3d/')}?${q}" title="Mapa 3D de ${esc(s.n)}" allow="fullscreen; geolocation"></iframe>${rec&&rec.t?'<div class="rp" id="rp"></div>':''}</div>`);
  const f=$('#v3d iframe');f.addEventListener('load',()=>{try{const h=f.contentWindow.history;h.pushState=(_s,t,u)=>h.replaceState(null,t,u)}catch(e){}});
  if(!(history.state&&history.state.v3d))try{history.pushState({v3d:1},'')}catch(e){}}
-function close3d(){const v=$('#v3d');if(v)v.remove();if(history.state&&history.state.v3d)history.back()}
+function close3d(){const v=$('#v3d');if(v)v.remove();RP=null;cancelAnimationFrame(rpRaf);if(history.state&&history.state.v3d){hSkip++;history.back()}}
 function go3d(i){close3d();if(st.rec&&SM[st.rec.station]){ov0();tab('est');return flash('Tienes un día sin guardar. Guárdalo o descártalo antes de empezar otro.')}traquear(i)}
-addEventListener('popstate',()=>{if(!(history.state&&history.state.v3d)){const v=$('#v3d');if(v)v.remove()}});
-function ov0(){clearInterval(T);stopW();st.drView=null;const o=$('.ov');if(o)o.remove();st.rec=recLoad();if(st.me)render()}
+// ───────── Atrás (botón de Android, gesto de borde, deslizar en Safari): cada capa que se abre encima (ficha, mapa 3D, historias,
+// pestaña que no es Estaciones) tiene su entrada en el historial, y atrás cierra solo la de arriba en vez de salir de la app.
+// hSkip cuenta los retrocesos que hemos pedido nosotros (cierres con botón) para que no se tomen por un «atrás» del usuario.
+let hOv=false,hTab=false,hSkip=0,hWant=false;
+const hPush=(o={ov:1})=>{try{history.pushState(o,'');if(o.ov)hOv=true;return true}catch(e){return false}};
+addEventListener('popstate',()=>{
+ if(hSkip>0){hSkip--;if(!hSkip&&hWant){hWant=false;if($('.ov'))hPush()}return}
+ const st0=history.state||{},v=$('#v3d'),w=$('#wr');
+ if(v){if(!st0.v3d)v.remove();return}
+ if(w){if(!st0.wr)wrClose();return}
+ const o=$('.ov');
+ if(o&&hOv){hOv=false;
+  if(o.classList.contains('onb')||o.querySelector('.speed')){hPush();if(o.classList.contains('onb')&&st.ob>0)obBack();if(o.querySelector('.speed'))flash('Pulsa Parar para terminar el día.');return}   // alta guiada y grabación: atrás no las cierra
+  const b=o.querySelector('.bk:not(.bkd),.link.back');if(b)act(b.dataset.c,b);else ov0();return}
+ if(hTab&&!o){hTab=false;if(st.me&&st.tab!=='est')tab('est')}
+});
+function ov0(){if(hOv){hOv=false;hSkip++;try{history.back()}catch(e){hSkip--}}hWant=false;clearInterval(T);stopW();st.drView=null;const o=$('.ov');if(o)o.remove();st.rec=recLoad();if(st.me)render()}
 function elegir(){if(st.rec&&SM[st.rec.station]){tab('est');return flash('Tienes un día sin guardar. Guárdalo o descártalo antes de empezar otro.')}ov(`<div class="top" style="padding-top:60px"><h1>¿Dónde esquías hoy?</h1><p class="mu" style="margin-top:6px">Elige la estación y empieza a grabar.</p></div>${st.sim&&!NAT?`<label style="display:flex;gap:10px;align-items:center;color:var(--tx);margin:0 0 14px"><input type="checkbox" id="real" style="width:auto"> Usar el GPS de este dispositivo (experimental)</label>`:''}<div class="grid">${S.map(s=>stCard(s,'traquear')).join('')}</div>`)}
 // Antes del primer permiso de ubicación, qué se hace con ella (divulgación destacada que pide Google Play). Se recuerda en el dispositivo
 function gpsInfo(i){ov(`<div class="top" style="padding-top:60px"><div class="eyebrow">Antes de grabar</div><h1>Pistea usa tu ubicación</h1></div><div class="card"><ul style="margin:0;padding-left:18px;line-height:1.55"><li><b>Solo mientras grabas</b>: desde que empiezas hasta que pulsas «Terminar el día».</li><li>En Android, un <b>aviso fijo</b> te recuerda que está grabando, también con la pantalla bloqueada.</li><li>Con ella se calculan tus bajadas, remontes, pistas, desnivel y velocidad. La grabación completa no se guarda: al terminar, el servidor la usa para comprobar el día y la descarta.</li><li>Tus días los ven tus seguidores, salvo que elijas otra cosa en Perfil → Quién ve tus días.</li></ul></div><p class="credit">Ahora el teléfono te pedirá permiso. Puedes quitarlo cuando quieras en sus ajustes. <a href="/privacidad" target="_blank" rel="noopener" style="color:inherit">Política de privacidad</a></p><button class="btn" data-c="gpsOk|${i}">Continuar</button><button class="btn gh" data-c="ov0">Ahora no</button>`)}
@@ -530,6 +575,8 @@ async function runReal(s,rs){
   wid=navigator.geolocation.watchPosition(p=>{const c=p.coords,f={t:p.timestamp,lat:c.latitude,lon:c.longitude,alt:c.altitude,acc:c.accuracy,v:c.speed,dir:Number.isFinite(c.heading)?c.heading:null};add(f);if(Date.now()-last>20000){last=Date.now();rec()}paint()},
    e=>{if(e.code===1)return fail('Sin permiso de ubicación. Actívalo para Pistea en los ajustes del navegador.');const l=$('#sl');if(l)l.textContent='Buscando la señal del GPS…'},{enableHighAccuracy:true,maximumAge:0,timeout:30000});   // sin señal o tiempo agotado (telecabina, túnel, pantalla apagada): se sigue grabando
   try{lock=await navigator.wakeLock.request('screen')}catch(e){}
+  // En el navegador el GPS se corta si la pantalla se apaga o se cambia de app: si no se ha podido mantener encendida, se avisa (la app de Android no tiene este problema)
+  if(!lock)flash('Tu navegador no deja mantener la pantalla encendida: no la apagues ni cambies de app o el día se cortará. Con la app de Pistea no pasa.')
   wl=async()=>{if(document.visibilityState==='visible'&&(!lock||lock.released))try{lock=await navigator.wakeLock.request('screen')}catch(e){}};document.addEventListener('visibilitychange',wl)
  }
  const btn=$('#fin');if(!btn)return;
@@ -551,7 +598,7 @@ const len=m=>m>=1000?dec(m/1000)+' km':fmt(m)+' m',hm=t=>new Date(t).toLocaleTim
 const segName=g=>g[0]==='f'?(g[1]?esc(g[1]):'Freeride'):g[1]?esc(g[1]):g[0]==='x'?'Sin pista':'Pista '+CL[g[0]][2];
 function dayHtml(s,d,o={}){const D=d.detail,sv=o.saved;
  const sp=d.speed&&d.speed.length>1?(()=>{const m=Math.max(...d.speed,1);return `<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none"><path d="${d.speed.map((v,i)=>(i?'L':'M')+(i/(d.speed.length-1)*300).toFixed(1)+' '+(76-v/m*70).toFixed(1)).join('')}" fill="none" stroke="#1f6fe0" stroke-width="2" stroke-linejoin="round"/></svg>`})():'';
- const map=trkMap(d.track,s.id,true),present=map?[...new Set(d.track.map(p=>p[2]))]:[],fv=map?trkFit(d.track,s.id):null,ar=fv?Math.min(1.6,Math.max(.7,(fv[2]-fv[0])/(fv[3]-fv[1]))):1;
+ const ok=!!trkMap(d.track,s.id),fv=ok?trkFit(d.track):null,ar=fv?Math.min(1.6,Math.max(.7,(fv[2]-fv[0])/(fv[3]-fv[1]))):1,map=ok?trkMap(d.track,s.id,ar):'',present=map?[...new Set(d.track.map(p=>p[2]))]:[],bar=dayBar(d);
  // Por dónde: metros por color y freeride (motor nuevo) o, en los días antiguos, bajadas por color estimado
  const M=D?D.m:null,tot=M?['v','a','r','n','f'].reduce((a,k)=>a+(M[k]||0),0):0,col=d.col||{};
  const where=M&&tot?`<div class="card"><div class="stack">${['v','a','r','n','f'].map(k=>M[k]?`<i style="flex:${M[k]};background:var(--${CL[k][1]})"></i>`:'').join('')}</div><div class="legs">${['v','a','r','n','f'].filter(k=>M[k]>=20).map(k=>`<span style="--c:var(--${CL[k][1]})"><i></i>${CL[k][0]}<b>${len(M[k])}</b></span>`).join('')}</div>${M.f>=20?`<small style="display:block;margin-top:10px">Freeride: fuera de pista, a más de 30 m del borde de cualquier pista, o por un itinerario marcado.</small>`:''}</div>`
@@ -563,7 +610,7 @@ function dayHtml(s,d,o={}){const D=d.detail,sv=o.saved;
  <div class="hero" style="margin-bottom:12px"><small>Desnivel esquiado</small><div class="big" style="margin-top:6px">${fmt(d.desnivel)}<span class="mu" style="font-size:20px"> m</span></div>${sv?`<small style="display:block;margin-top:10px">Puesto ${sv.posStation} en ${esc(s.n)} y ${sv.after} en España</small>`:''}${d.freeride>=0.05?`<span class="fr-tag" style="margin-top:12px">${dec(d.freeride)} km de freeride</span>`:''}</div>
  ${novHtml(s,sv&&sv.nov)}
  <div class="kpis"><div><b>${dec(d.km)}</b><small>km</small></div><div><b>${d.bajadas}</b><small>bajadas</small></div><div><b>${d.vmax.toFixed(0)}</b><small>vel. máx km/h</small></div><div><b>${d.vmed.toFixed(0)}</b><small>vel. media km/h</small></div><div><b>${dec(d.horas)} h</b><small>esquiando</small></div><div><b>${dec(d.total||d.horas)} h</b><small>tiempo total</small></div></div>
- <h2>Recorrido</h2>${map?`<div class="dmap" style="aspect-ratio:${ar.toFixed(3)}" role="img" aria-label="Recorrido del día sobre la estación">${map}</div><div class="maplg">${[1,2,3,4,5,0].filter(c=>present.includes(c)).map(c=>`<span style="--c:${c?TC[c]:'#9fb1c4'}">${c?CL['varnf'[c-1]][0]:'Subidas'}</span>`).join('')}</div>`:`<div class="map" style="height:150px;margin-top:0">${trk(d.track,300,150)}</div>`}
+ <h2>Recorrido</h2>${map?`<div class="dmap" style="aspect-ratio:${ar.toFixed(3)}" data-c="rec3d" role="button" tabindex="0" aria-label="Repasar el día en el mapa 3D de ${esc(s.n)}">${map}<span class="dmap-go">${ic('play')}Repasar en 3D</span></div>${bar?`<div class="dstrip">${barHtml(bar)}</div>`:''}<div class="maplg">${[1,2,3,4,5,0].filter(c=>present.includes(c)).map(c=>`<span style="--c:${TC[c]}">${c?CL['varnf'[c-1]][0]:'Subidas'}</span>`).join('')}</div>`:`<div class="map" style="height:150px;margin-top:0">${trk(d.track,300,150)}</div>`}
  <h2>Por dónde has bajado</h2>${where}${runs}${lifts}
  ${sp?`<h2>Velocidad</h2><div class="card">${sp}</div>`:''}
  ${o.mine===false?'':'<button class="btn" data-c="shareDay" style="margin-top:20px">Compartir día</button>'}${sv?'<button class="btn gh" data-c="rankOf|España">Ver mi posición en el ranking</button>':''}`}
@@ -572,6 +619,76 @@ function novHtml(s,nv){if(!nv||!nv.nuevas.length)return '';const pp=PP?ppStat(s.
  return `<div class="card nov">${nv.nuevas.length?`<div data-c="ppView|${s.id}" role="button" tabindex="0">${ic('check')}<span><b>${nv.nuevas.length===1?'1 pista nueva':nv.nuevas.length+' pistas nuevas'} en tu pasaporte</b>${list(nv.nuevas.map(p=>esc(p[0])))}${pp&&pp.total?`. Llevas ${pp.done} de ${pp.total} en ${esc(s.n)}`:''}</span></div>`:''}</div>`}
 function resumen(s,r){st.last={s,d:r.day};st.toast=r.before&&r.after<r.before?`Subes del puesto ${r.before} al ${r.after} de España`:0;ov(dayHtml(s,r.day,{saved:r}));render()}
 async function dayView(id){try{const d=await api('day?id='+encodeURIComponent(id)),s=SM[d.station];if(!s)return;st.last={s,d};ov(dayHtml(s,d,{alias:d.me?'':d.alias,mine:d.me}))}catch(e){flash(e.message)}}
+// ───────── Repasar el día en el 3D (25-nov-2026). La barra del día: cada bajada, un bloque del color del tramo por el que
+// más bajó; cada remonte, una franja gris con su cola rayada justo antes; los huecos, vacíos. Va de la primera cola o bajada
+// a la última (ms). Solo con horas: a quien no es su dueño, el día le llega sin ellas (LEGAL.md L1)
+const runMain=r=>r[5].reduce((b,g)=>g[2]>b[2]?g:b,r[5][0]||['x','',0,0]);
+function dayBar(d){const D=d.detail;if(!D||!D.runs||!D.runs.length||D.runs[0][0]==null)return null;const B=[];
+ for(const r of D.rides||[])if(r[1]!=null){if(r[4]>=30)B.push({a:r[1]-r[4]*1000,b:r[1],k:'q'});B.push({a:r[1],b:r[2],k:'l'})}
+ D.runs.forEach(r=>B.push({a:r[0],b:r[1],k:'r',c:runMain(r)[0]}));B.sort((x,y)=>x.a-y.a);
+ return {a:B[0].a,b:Math.max(...B.map(x=>x.b)),B}}
+function barHtml(bar,inner=''){const W=bar.b-bar.a||1,p=t=>(t-bar.a)/W*100,H=[];for(let h=Math.ceil(bar.a/36e5)*36e5;h<=bar.b;h+=36e5)H.push(h);const k=H.length>7?2:1;
+ return `<div class="dbar">${bar.B.map(x=>`<i class="${x.k}" style="left:${p(x.a).toFixed(2)}%;width:${Math.max((x.b-x.a)/W*100,.5).toFixed(2)}%${x.k==='r'?`;--c:var(--${CL[x.c][1]})`:''}"></i>`).join('')}${inner}</div><div class="dhrs" aria-hidden="true">${H.filter((h,i)=>i%k===0).map(h=>{const q=p(h);return `<span style="left:${q.toFixed(2)}%;transform:translateX(${q<6?0:q>94?-100:-50}%)">${hm(h)}</span>`}).join('')}</div>`}
+// El repaso: el 3D de la estación con el recorrido (Estaciones3D, ?recorrido=1, que lo dibuja con recorrido.js) y, debajo,
+// la hora, lo que hacías a esa hora, la barra del día para arrastrar, reproducir (el día entero en RP_DAY s a ×1), seguir
+// el marcador con la cámara y la lista de bajadas en orden (tocar una la encuadra). El 3D y la página se hablan con
+// postMessage, solo con el origen de los mapas. Sin la hora de cada punto (días de antes de esto o de otra persona) se ve
+// el recorrido entero y el orden de las bajadas, sin reloj
+const RP_DAY=80;let RP=null,rpRaf=0,rpLast=0;
+const mapsOrigin=()=>{try{return new URL(st.maps||'/3d/',location.href).origin}catch(e){return location.origin}};
+const send3d=m=>{const f=$('#v3d iframe');if(f&&f.contentWindow)f.contentWindow.postMessage(m,mapsOrigin())};
+addEventListener('message',e=>{const f=$('#v3d iframe'),m=e.data,R=RP;if(!R||!f||e.source!==f.contentWindow||e.origin!==mapsOrigin()||!m||typeof m!=='object')return;
+ if(m.pistea==='listo'){R.ready=true;send3d({pistea:'recorrido',puntos:R.pts});if(R.cur!=null)rpSend()}
+ else if(m.pistea==='suelto'&&R.follow){R.follow=false;rpTick()}});
+function rec3d(){const L=st.last;if(!L||!L.d||!trkMap(L.d.track,L.s.id))return;const{s,d}=L,D=d.detail&&d.detail.runs?d.detail:{runs:[],rides:[]},cum=[0];
+ for(let i=1;i<d.track.length;i++)cum.push(cum[i-1]+Math.hypot(d.track[i][0]-d.track[i-1][0],d.track[i][1]-d.track[i-1][1]));
+ const timed=d.track[0].length>3&&d.t0!=null&&D.runs.length&&D.runs[0][0]!=null,bar=timed?dayBar(d):null;
+ // sin horas, una por la distancia (a 5 m/s), solo para que el 3D sepa el orden y encuadre
+ const pts=timed?d.track:d.track.map((p,i)=>[p[0],p[1],p[2],Math.round(cum[i]/5)]);
+ RP={s,d,D,pts,cum,timed:!!bar,bar,a:bar?(bar.a-d.t0)/1000:0,b:bar?(bar.b-d.t0)/1000:0,cur:null,play:false,mul:1,follow:true,ready:false,k:null};
+ open3d(s.id,null,{t:d.me===false?(d.alias?'Día de '+d.alias:'Su día'):'Tu día'});rpPaint()}
+// Las bajadas que destacan (con tres o más): la más larga y la de más desnivel
+const bestRuns=D=>{const o={};if(D.runs.length<3)return o;const k=f=>D.runs.reduce((b,r,i)=>f(r)>f(D.runs[b])?i:b,0);o[k(r=>r[3])]='la más larga';const j=k(r=>r[2]);if(!o[j])o[j]='más desnivel';return o};
+function rpPaint(){const el=$('#rp'),R=RP;if(!el||!R)return;const D=R.D,n=D.runs.length,mx=R.timed?bestRuns(D):{};
+ const runs=n?`<div class="rp-runs" id="rp-l">${D.runs.map((r,i)=>{const g=runMain(r),body=`<i style="--c:var(--${CL[g[0]][1]})"></i><b>${i+1}</b>${segName(g)}${R.timed?`<small>${hm(r[0])}</small>`:''}${mx[i]?`<em>${mx[i]}</em>`:''}`;return R.timed?`<button class="rp-run" data-c="rpRun|${i}">${body}</button>`:`<span class="rp-run">${body}</span>`}).join('')}</div>`:'';
+ el.innerHTML=R.timed?`<div class="rp-now"><time id="rp-t"></time><div class="rp-w"><b id="rp-w"></b><small id="rp-x"></small></div></div>
+ <div class="rp-bar">${barHtml(R.bar,`<span class="rp-fut" id="rp-fut"></span><span class="rp-head" id="rp-h"></span><input type="range" id="rp-r" min="${Math.floor(R.a)}" max="${Math.ceil(R.b)}" step="1" value="${Math.floor(R.a)}" aria-label="Hora del día" data-i="rpScrub|@v">`)}</div>
+ <div class="rp-ctl"><button class="rp-play" id="rp-p" data-c="rpPlay"></button><button class="rp-btn" id="rp-m" data-c="rpSpeed" aria-label="Velocidad de la reproducción"></button><button class="rp-btn" id="rp-f" data-c="rpFollow">Seguirme</button></div>${runs}`
+ :`<div class="rp-now"><div class="rp-w"><b>${n} ${n===1?'bajada':'bajadas'}</b><small>En el orden en que se hicieron</small></div></div>${runs}`;
+ rpTick()}
+// Lo que hacías a los s segundos: en una bajada (por qué pista, del desglose), en un remonte o en su cola, parado o de camino
+const rpDist=s=>{const P=RP.pts,C=RP.cum;let a=0,b=P.length-1;if(s<=P[0][3])return 0;if(s>=P[b][3])return C[b];while(b-a>1){const m=(a+b)>>1;if(P[m][3]<=s)a=m;else b=m}const u=P[b][3]>P[a][3]?(s-P[a][3])/(P[b][3]-P[a][3]):0;return C[a]+(C[b]-C[a])*u};
+function rpSeg(r,s){const t0=RP.d.t0,d0=rpDist((r[0]-t0)/1000),d1=rpDist((r[1]-t0)/1000),tot=r[5].reduce((a,g)=>a+g[2],0)||1,f=d1>d0?(rpDist(s)-d0)/(d1-d0):0;let acc=0;for(const g of r[5]){acc+=g[2];if(acc/tot>=f)return g}return r[5].at(-1)||['x','',0,0]}
+function rpWhat(s){const R=RP,D=R.D,t=R.d.t0+s*1000;
+ for(const r of D.rides){if(r[1]==null)continue;if(t>=r[1]&&t<=r[2])return {w:esc(cap(r[0])),x:'Subiendo'};if(r[4]>=30&&t>=r[1]-r[4]*1000&&t<r[1])return {w:esc(cap(r[0])),x:`En la cola: ${Math.max(1,Math.round(r[4]/60))} min`}}
+ const k=D.runs.findIndex(r=>t>=r[0]&&t<=r[1]);
+ if(k>=0){const g=rpSeg(D.runs[k],s);return {w:segName(g),c:CL[g[0]][1],x:`Bajada ${k+1} de ${D.runs.length}`,k}}
+ // Entre una cosa y otra: [desde, hasta, remonte (1) o bajada (0), nombre o número]
+ const ev=[...D.runs.map((r,i)=>[r[0],r[1],0,i]),...D.rides.filter(r=>r[1]!=null).map(r=>[r[1]-(r[4]>=30?r[4]*1000:0),r[2],1,r[0]])],pv=ev.filter(e=>e[1]<=t).sort((a,b)=>b[1]-a[1])[0],nx=ev.filter(e=>e[0]>=t).sort((a,b)=>a[0]-b[0])[0];
+ if(!pv)return {w:'Antes de la primera bajada',x:nx?`Empiezas a las ${hm(nx[0])}`:''};
+ if(!nx)return {w:'Fin del día',x:`Última bajada a las ${hm(pv[1])}`};
+ const gap=(nx[0]-pv[1])/6e4,sig=nx[2]?'':`La bajada ${nx[3]+1} empieza a las ${hm(nx[0])}`;
+ if(gap>=15)return {w:'Parada',x:`${Math.round(gap)} min sin esquiar, de ${hm(pv[1])} a ${hm(nx[0])}`};
+ if(nx[2])return {w:esc(cap(nx[3])),x:pv[2]?'Cambiando de remonte':'De camino al remonte'};
+ return {w:pv[2]?'Arriba, antes de bajar':'Entre dos bajadas',x:sig}}
+function rpTick(){const R=RP;if(!R||!R.timed||!$('#rp-t'))return;const s=R.cur??R.a,w=R.cur==null?{w:`${R.D.runs.length} bajadas en ${esc(R.s.n)}`,x:'Arrastra la barra para ver dónde estabas a cada hora'}:rpWhat(s),pc=((s-R.a)/((R.b-R.a)||1)*100).toFixed(2)+'%',r=$('#rp-r');
+ $('#rp-t').textContent=hm(R.d.t0+s*1000);$('#rp-w').innerHTML=`${w.c?`<i style="--c:var(--${w.c})"></i>`:''}<span>${w.w}</span>`;$('#rp-x').textContent=w.x||'';
+ $('#rp-h').style.left=$('#rp-fut').style.left=pc;$('#rp-fut').hidden=R.cur==null;if(document.activeElement!==r)r.value=Math.round(s);r.setAttribute('aria-valuetext',`${hm(R.d.t0+s*1000)}, ${$('#rp-w').textContent}`);
+ const p=$('#rp-p');p.innerHTML=ic(R.play?'pause':'play');p.setAttribute('aria-label',R.play?'Pausar':'Reproducir el día');$('#rp-m').textContent='×'+R.mul;$('#rp-f').setAttribute('aria-pressed',String(R.follow));
+ const k=w.k??-1;if(k!==R.k){R.k=k;const L=[...document.querySelectorAll('#rp-l .rp-run')];L.forEach((b,i)=>b.classList.toggle('on',i===k));if(L[k])L[k].scrollIntoView({block:'nearest',inline:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}}
+function rpSend(){const R=RP;if(R&&R.ready)send3d({pistea:'momento',s:R.cur,seguir:R.follow})}
+// Reproducir: el día entero en RP_DAY s a ×1; repetir una bajada (R.run = [hasta, ritmo]), en RP_RUN s y parando al final
+const RP_RUN=6;
+function rpStep(now){const R=RP;if(!R||!R.play||!$('#rp'))return;const dt=Math.min(.1,(now-rpLast)/1000),end=R.run?R.run[0]:R.b;rpLast=now;
+ R.cur=Math.min(end,R.cur+dt*(R.run?R.run[1]:(R.b-R.a)/RP_DAY*R.mul));if(R.cur>=end){R.play=false;R.run=null}rpSend();rpTick();if(R.play)rpRaf=requestAnimationFrame(rpStep)}
+const rpGo=()=>{rpLast=performance.now();cancelAnimationFrame(rpRaf);rpRaf=requestAnimationFrame(rpStep)};
+function rpPlay(){const R=RP;if(!R||!R.timed)return;R.play=!R.play;R.run=null;if(R.play){if(R.cur==null||R.cur>=R.b-1)R.cur=R.a;rpGo()}rpSend();rpTick()}
+function rpScrub(v){const R=RP;if(!R)return;R.cur=+v;rpSend();rpTick()}
+function rpSpeed(){const R=RP;if(R){R.mul=R.mul>=4?1:R.mul*2;rpTick()}}
+function rpFollow(){const R=RP;if(!R)return;R.follow=!R.follow;if(R.follow&&R.cur==null)R.cur=R.a;rpSend();rpTick()}
+// Tocar una bajada la encuadra y la repite: el marcador la recorre y se para al final (la cámara se queda quieta)
+function rpRun(i){const R=RP,r=R&&R.D.runs[+i];if(!r||r[0]==null)return;const a=(r[0]-R.d.t0)/1000,b=(r[1]-R.d.t0)/1000;R.follow=false;R.cur=a;R.run=[b,Math.max(1,(b-a)/RP_RUN)];R.play=true;
+ if(R.ready)send3d({pistea:'encuadre',desde:a,hasta:b});rpSend();rpTick();rpGo()}
 async function shareDay(){const{s,d}=st.last,c=document.createElement('canvas');c.width=1080;c.height=1920;const g=c.getContext('2d');
  try{await Promise.all([document.fonts.load('700 120px Cond'),document.fonts.load('600 40px Barlow'),document.fonts.load('500 40px Barlow')])}catch(e){}
  const CD='Cond, "Arial Narrow", sans-serif',BR='Barlow, system-ui, sans-serif',INK='#0f2a44',OR='#ff5a1f';
@@ -611,7 +728,7 @@ function togglePw(b){const p=$('#pw');p.type=p.type==='password'?'text':'passwor
 function rankOf(n){st.amb=n;st.met='desnivel';ov0();tab('rec')}
 const panelDatos=()=>{location.href='/panel'};
 const ACT={gpsOk,legalOk,drVis,people,ppKind,ppMore,ppSearch,rmFollower,peopleBack,activity,reqAns,reqAll,drApr,panelDatos,pickAvatar,pickFile,ficha,traquear,setF,setS,setP,setA,blockUser,boot,changePw,togglePw,delAccount,delAvatar,editProfile,elegir,exportData,follow,go,kudo,logout,logoutAll,moderation,ov0,profile,recDiscard,recResume,recSaveDay,reportUser,resendVerify,resolveRep,setM,shareDay,showBlocks,rankOf,tab,unblock,search,savePw,sendReport,submitAuth,
- open3d,close3d,go3d,pisteF,pisteAll,dayView,ppView,pisteView,wrapped,wrNext,wrPrev,wrTap,wrClose,wrAgain,wrShare,drSet,drPick,drTog,drSel,drZone,handleIn,useHandle,obNext,obBack,obSkip,obEnd,edSave,pwMeter};
+ open3d,close3d,go3d,rec3d,rpPlay,rpScrub,rpSpeed,rpFollow,rpRun,pisteF,pisteAll,dayView,ppView,pisteView,wrapped,wrNext,wrPrev,wrTap,wrClose,wrAgain,wrShare,drSet,drPick,drTog,drSel,drZone,handleIn,useHandle,obNext,obBack,obSkip,obEnd,edSave,pwMeter};
 function act(spec,el,ev){const[fn,...a]=String(spec).split('|'),f=Object.prototype.hasOwnProperty.call(ACT,fn)&&ACT[fn];if(typeof f!=='function')return;return f(...a.map(x=>x==='@'?el:x==='@v'?el.value:x==='@e'?ev:x))}
 document.addEventListener('click',e=>{const el=e.target.closest('[data-c]');if(el)act(el.dataset.c,el,e)});
 document.addEventListener('submit',e=>{const el=e.target.closest('[data-s]');if(el){e.preventDefault();act(el.dataset.s,el,e)}});

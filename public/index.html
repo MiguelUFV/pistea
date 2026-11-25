@@ -35,7 +35,7 @@ svg.i{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stro
 
 /* barra inferior: el botón de grabar es la única pieza naranja fija */
 nav{display:flex;align-items:center;background:var(--s1);border-top:1px solid var(--ln);padding:6px 6px calc(8px + env(safe-area-inset-bottom))}
-nav button{flex:1;background:none;border:0;color:var(--mu);font:500 12px Barlow,sans-serif;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;cursor:pointer}
+nav button{flex:1;min-height:48px;background:none;border:0;color:var(--mu);font:500 12px Barlow,sans-serif;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;cursor:pointer}
 nav button.on{color:var(--tx);font-weight:600}
 nav button.on svg{stroke-width:2.1}
 nav .go{flex:none;width:58px;height:58px;border-radius:50%;background:var(--or);color:#fff;margin:-22px 6px 0;justify-content:center;padding:0;box-shadow:0 0 0 5px var(--s1),0 6px 16px rgba(255,90,31,.35)}
@@ -102,7 +102,32 @@ nav .go svg{width:26px;height:26px;stroke-width:2.2}
 #v3d header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:calc(8px + env(safe-area-inset-top)) 10px 8px 4px;color:#fff}
 .v3d-back{display:flex;align-items:center;gap:4px;background:none;border:0;color:#fff;font:700 21px var(--cond);cursor:pointer;padding:6px 8px;min-width:0}.v3d-back span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .v3d-go{display:flex;align-items:center;gap:6px;background:var(--or);color:#fff;border:0;border-radius:99px;padding:9px 15px;font:600 14.5px Barlow,sans-serif;cursor:pointer;flex:none}.v3d-go svg{width:18px;height:18px}
-#v3d iframe{flex:1;width:100%;border:0;background:#dfe9f2}
+#v3d iframe{flex:1;width:100%;min-height:0;border:0;background:#dfe9f2}
+.v3d-st{color:#a9bfd4;font:600 14.5px Barlow,sans-serif;padding-right:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* el repaso del día bajo el 3D: la hora y lo que hacías, la barra del día para arrastrar (el cabezal naranja es «tú», como
+   el marcador del 3D; lo que falta, en sombra), reproducir, seguirme y las bajadas en orden */
+.rp{color:#fff;padding:12px 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+.rp-now{display:flex;align-items:center;gap:14px;min-height:50px}
+.rp-now time{font:700 42px/1 var(--cond);font-variant-numeric:tabular-nums;flex:none}
+.rp-w{min-width:0}.rp-w b{display:flex;align-items:center;gap:8px;font:600 17px/1.25 Barlow,sans-serif}.rp-w b span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rp-w b i{flex:none;width:12px;height:12px;border-radius:3px;background:var(--c);box-shadow:0 0 0 1.5px #fff}
+.rp-w small{display:block;margin-top:3px;color:#a9bfd4;font-size:13.5px}
+.rp .dbar{height:30px;background:rgba(255,255,255,.1);--lift:#8fa4ba}.rp .dhrs{color:#8fa4ba}
+.rp .dbar:focus-within{outline:2px solid #fff;outline-offset:3px}
+.rp-fut{position:absolute;top:0;bottom:0;right:0;background:rgba(15,42,68,.62);pointer-events:none}
+.rp-head{position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:var(--or);border-radius:2px;box-shadow:0 0 0 1.5px #fff;pointer-events:none}
+.rp input[type=range]{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;touch-action:none}
+.rp-ctl{display:flex;align-items:center;gap:8px}
+.rp-play{width:46px;height:46px;border-radius:50%;border:0;background:#fff;color:var(--tx);display:grid;place-items:center;cursor:pointer;flex:none}.rp-play svg{width:20px;height:20px;stroke-width:2.6}.rp-play svg path[d^="M8 5"]{fill:currentColor}
+.rp-btn{min-height:44px;border-radius:99px;border:1px solid rgba(255,255,255,.3);background:none;color:#fff;font:600 14px Barlow,sans-serif;padding:0 15px;cursor:pointer}
+.rp-btn[aria-pressed=true]{background:#fff;color:var(--tx);border-color:#fff}
+.rp-runs{display:flex;gap:8px;overflow-x:auto;margin:0 -16px;padding:0 16px 2px;scrollbar-width:none}
+.rp-run{flex:none;display:flex;align-items:center;gap:7px;min-height:40px;border:0;border-radius:99px;background:rgba(255,255,255,.09);color:#fff;font:500 13.5px Barlow,sans-serif;padding:0 13px 0 11px;cursor:pointer;white-space:nowrap}
+.rp-run i{width:10px;height:10px;border-radius:3px;background:var(--c);box-shadow:0 0 0 1.5px rgba(255,255,255,.9)}
+.rp-run b{font:700 14px var(--cond);opacity:.65}.rp-run small{color:#a9bfd4;font-size:12.5px}
+.rp-run em{font-style:normal;font-size:11.5px;font-weight:600;color:var(--tx);background:#ffd28a;border-radius:99px;padding:2px 7px}
+.rp-run.on{background:#fff;color:var(--tx)}.rp-run.on small{color:var(--mu)}.rp-run.on b{opacity:1}
+span.rp-run{cursor:default}
 /* pistas de la ficha: la señal es un cuadrado del color de su dificultad, como las de pista */
 .sg{width:14px;height:14px;border-radius:3px;flex:none;background:var(--c);display:inline-block}
 .pills .sg{width:10px;height:10px;margin-right:6px;vertical-align:-1px}
@@ -138,7 +163,7 @@ nav .go svg{width:26px;height:26px;stroke-width:2.2}
 /* capas */
 .ov{position:absolute;inset:0;background:var(--bg);z-index:5;overflow-y:auto;padding:0 18px 32px;animation:up .24s cubic-bezier(.2,.8,.2,1);scrollbar-width:none}.ov:focus{outline:none}
 @keyframes up{from{transform:translateY(28px);opacity:0}}
-.x{position:sticky;top:14px;float:right;background:var(--s1);color:var(--tx);width:38px;height:38px;border-radius:50%;cursor:pointer;z-index:3;display:grid;place-items:center;margin-top:14px;border:0;box-shadow:0 2px 8px rgba(15,42,68,.18)}
+.x{position:sticky;top:14px;float:right;background:var(--s1);color:var(--tx);width:44px;height:44px;border-radius:50%;cursor:pointer;z-index:3;display:grid;place-items:center;margin-top:14px;border:0;box-shadow:0 2px 8px rgba(15,42,68,.18)}
 .photo{margin:0 -18px;padding:170px 18px 22px;color:#fff;background:var(--sky) center/cover no-repeat;position:relative;isolation:isolate}
 .photo::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(180deg,rgba(9,30,52,.15),rgba(9,30,52,.78))}
 .photo .eyebrow{color:rgba(255,255,255,.88)}.photo h1{font-size:40px}
@@ -247,7 +272,14 @@ h2 #rqn{display:inline-grid;place-items:center;min-width:24px;height:24px;border
 .reveal .idrow{animation:pop .5s .12s cubic-bezier(.2,.8,.2,1.2) both}
 /* el día: el recorrido sobre la foto de satélite, por dónde se ha bajado, cada bajada con sus pistas y los remontes. El
    freeride va en ámbar, el de los itinerarios fuera de pista */
-.dmap{width:100%;border-radius:var(--r2);background:#1b2a3a;position:relative;overflow:hidden}
+.dmap{width:100%;border-radius:var(--r2);background:#e3eaf1;position:relative;overflow:hidden;cursor:pointer}.dmap:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+.dmap-go{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:6px;background:var(--tx);color:#fff;border-radius:99px;padding:8px 14px 8px 11px;font:600 14px Barlow,sans-serif;box-shadow:0 4px 14px rgba(15,42,68,.3);pointer-events:none}.dmap-go svg{width:15px;height:15px;fill:currentColor}
+/* la barra del día: cada bajada en su color, los remontes en gris y sus colas rayadas; debajo, las horas */
+.dstrip{margin-top:10px}
+.dbar{position:relative;height:20px;border-radius:6px;background:var(--s2);overflow:hidden;--lift:#93a6ba}
+.dbar i{position:absolute;top:0;bottom:0}.dbar .r{top:2px;bottom:2px;border-radius:1px;background:var(--c)}
+.dbar .l{top:42%;bottom:42%;background:var(--lift)}.dbar .q{top:30%;bottom:30%;background:repeating-linear-gradient(135deg,var(--lift) 0 2px,transparent 2px 5px)}
+.dhrs{position:relative;height:16px;margin-top:4px;font-size:11.5px;color:var(--mu);font-variant-numeric:tabular-nums}.dhrs span{position:absolute;top:0;white-space:nowrap}
 .dmap svg{display:block}.maplg{display:flex;flex-wrap:wrap;gap:6px 12px;margin:8px 2px 0;font-size:13px;color:var(--mu)}
 .maplg span:before{content:"";display:inline-block;width:14px;height:4px;border-radius:2px;background:var(--c);margin-right:6px;vertical-align:3px}
 .legs{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:14px}.legs span{display:flex;align-items:center;gap:7px}.legs b{margin-left:auto;font:700 16px var(--cond)}
@@ -325,6 +357,11 @@ h2 #rqn{display:inline-grid;place-items:center;min-width:24px;height:24px;border
 @keyframes wrin{from{transform:translateY(22px);opacity:0}}
 @keyframes wrbar{to{transform:scaleX(1)}}
 @keyframes pop{from{transform:translateY(16px) scale(.94);opacity:0}}
+.sk{display:block;border-radius:8px;background:linear-gradient(90deg,var(--s2) 25%,var(--ln) 50%,var(--s2) 75%);background-size:200% 100%;animation:sk 1.2s linear infinite}.sk.c{width:34px;height:34px;border-radius:50%;flex:none}.sk.l{flex:1;height:14px}.sk.r{width:48px;height:14px}
+@keyframes sk{to{background-position:-200% 0}}
+#net{position:fixed;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);z-index:99;background:#1b2a3a;color:#fff;font-size:13px;font-weight:600;padding:7px 14px;border-radius:99px;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.st{content-visibility:auto;contain-intrinsic-size:auto 180px 225px}
+.x.bkd{float:left;margin-left:0}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body><div id="app"><main id="m"></main><nav id="nav"></nav></div>
 <script src="/calc.js"></script>

@@ -253,7 +253,12 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('…y sin freeride por la pista', j.day && j.day.freeride < 0.05 && dt.m.f < 50);
   t('ver el día con su desglose', (await G('GET', '/api/day?id=' + j.day.id))[1].detail?.runs?.length === 3);
   t('el mismo día dos veces', (await G('POST', '/api/days', real))[0] === 409);
-  t('la traza no se guarda (solo el recorrido simplificado)', !(await db.execute('PRAGMA table_info(days)')).rows.some(r => /trace|lat|lon/.test(r.name)) && (tr => tr.length <= 500 && tr.every(p => p.length === 3))(JSON.parse((await db.execute("SELECT track FROM days WHERE src='gps' LIMIT 1")).rows[0].track)));
+  const TR = JSON.parse((await db.execute("SELECT track FROM days WHERE src='gps' LIMIT 1")).rows[0].track), TT = (RD.at(-1).t - RD[0].t) / 1000;
+  t('la traza no se guarda (solo el recorrido simplificado)', !(await db.execute('PRAGMA table_info(days)')).rows.some(r => /trace|lat|lon/.test(r.name)) && TR.length <= 1000 && TR.every(p => p.length === 4));
+  t('…con la hora de cada punto: segundos desde el t0 del día, en orden', TR.every((p, i) => p[3] >= 0 && p[3] <= TT + 1 && (!i || p[3] >= TR[i - 1][3])) && TR.at(-1)[3] > TT / 2, `${TR[0]} … ${TR.at(-1)} de ${TT} s`);
+  t('su dueño ve las horas del recorrido al abrir el día', (await G('GET', '/api/day?id=' + j.day.id))[1].track.every(p => p.length === 4));
+  const fg = (await G('GET', '/api/feed?scope=todos'))[1].find(d => d.id === j.day.id), ug = (await G('GET', '/api/user?id=' + j.day.uid))[1].days.find(d => d.id === j.day.id);
+  t('las tarjetas llevan el recorrido ligero y sin horas (también las propias)', fg && ug && [fg, ug].every(d => d.track.length > 1 && d.track.length <= 160 && d.track.every(p => p.length === 3)), `${fg && fg.track.length} ${ug && ug.track.length}`);
   t('ranking de freeride', (await G('GET', '/api/rank?metric=freeride'))[0] === 200);
   const rv = (await G('GET', '/api/rank?metric=vmax'))[1], rdv = (await G('GET', '/api/rank?metric=desnivel'))[1];
   t('no hay ranking de velocidad (se ignora la métrica)', JSON.stringify(rv.rows) === JSON.stringify(rdv.rows));
@@ -274,7 +279,11 @@ const REG = { email: 'ana@pistea.es', password: 'Nieve-Polvo-2026', alias: 'Ana 
   t('Wrapped pide sesión', (await browser()('GET', '/api/wrapped'))[0] === 401);
   // …y quién sale en los récords de una pista: las cuentas públicas, la propia aunque no esté verificada, nunca un bloqueado
   const H = browser(); await H('POST', '/api/register', { ...REG, email: 'hielo@pistea.es', alias: 'Hielo Rápido' }); await browser()('POST', '/api/verify', { token: linkFor('hielo@pistea.es', 'verify') });
-  t('otro esquiador con el mismo día GPS', (await H('POST', '/api/days', real))[0] === 200);
+  [s, j] = await H('POST', '/api/days', real);
+  t('otro esquiador con el mismo día GPS', s === 200);
+  await H('POST', '/api/me', { vis: 'todos' });
+  const oh = (await G('GET', '/api/day?id=' + j.day.id))[1];
+  t('a los demás, el recorrido sin la hora de cada punto', oh && oh.t0 === null && oh.track.length > 1 && oh.track.every(p => p.length === 3), JSON.stringify(oh && oh.track && oh.track[0]));
   const bola = async X => (await X('GET', '/api/piste?station=valdesqui&name=' + encodeURIComponent('Bola II')))[1].runs.map(x => x.alias);
   t('récords: sale el verificado y no el que no lo está', (await bola(G)).includes('Hielo Rápido') && !(await bola(H)).includes('Gps Real') && (await bola(G)).includes('Gps Real'));
   const hId = (await H('GET', '/api/me'))[1].user.id;

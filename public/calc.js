@@ -209,7 +209,8 @@
       const w = trend.t && raw.t - trend.t < 10000 ? Math.min(1, (raw.t - trend.t) / 6000) : 1;
       trend.x += (k.vx - trend.x) * w; trend.z += (k.vz - trend.z) * w; trend.t = raw.t;
       const tv = Math.hypot(trend.x, trend.z), slope = !dem ? 0 : tv > 1 ? Math.atan(Math.abs(h(trend.x / tv * 10, trend.z / tv * 10))) / RAD : Math.atan(Math.hypot(h(10, 0), h(0, 10))) / RAD;
-      const f = { t: raw.t, x: k.x, z: k.z, acc: raw.acc, sd: k.sd, v: k.v, v3: k.v * Math.sqrt(1 + g * g), ele, slope, dist: 0, drop: 0, dt: 0, near: S.near(k.x, k.z, raw.acc), lifts: S.liftsAt(k.x, k.z, raw.acc) };
+      // v3: la Doppler cruda mide la distancia mejor que el módulo del vector filtrado (que recorta curvas); si discrepa mucho del filtro es un pico y vale el filtro
+      const f = { t: raw.t, x: k.x, z: k.z, acc: raw.acc, sd: k.sd, v: k.v, v3: (Number.isFinite(raw.v) && raw.v >= 0.6 && k.v > 0.6 && Math.abs(raw.v - k.v) < Math.max(3, 0.4 * k.v) ? raw.v : k.v) * Math.sqrt(1 + g * g), ele, slope, dist: 0, drop: 0, dt: 0, near: S.near(k.x, k.z, raw.acc), lifts: S.liftsAt(k.x, k.z, raw.acc) };
       if (prev) {
         const dt = (f.t - prev.t) / 1000, moving = f.v > MOVING, chord = Math.hypot(Math.hypot(f.x - prev.x, f.z - prev.z), ele - prev.ele), run = (f.v3 + prev.v3) / 2 * dt;
         // Tras un hueco de la señal (bajo los pinos), entre la recta y vez y media la recta
@@ -364,16 +365,21 @@
       return { runs: A.runs, rides: A.rides, m, dist, drop, vmax, skiTime, steep, liftTime: A.rides.reduce((t, r) => t + (r.t1 - r.t0) / 1000, 0), waitTime: A.rides.reduce((t, r) => t + r.wait, 0),
         start: F.length ? F[0].t : null, end: F.length ? F[F.length - 1].t : null, maxEle: F.reduce((x, f) => Math.max(x, f.ele), -Infinity) };
     }
-    // El recorrido para dibujarlo: [[x, z, clase]] (la clase es la del tramo que llega a ese punto), simplificado por trozos
-    // de la misma clase (Douglas-Peucker) hasta que quepa en max puntos
-    function track(max = 500) {
-      const A = analyze(), pts = F.map((f, i) => [f.x, f.z, A.kind[i] === 'up' ? CODE.up : CODE[A.cls[i]]]);
+    // El recorrido para dibujarlo y repasarlo: [[x, z, clase, s]] (la clase es la del tramo que llega a ese punto; s, los
+    // segundos desde t0, por defecto la primera posición), simplificado por trozos de la misma clase (Douglas-Peucker) hasta
+    // que quepa en max puntos. La distancia que mide es la sincronizada: dónde estabas en ese instante frente a dónde te
+    // pondría ir a velocidad constante entre los dos puntos que se quedan. Así un rato parado o una cola se conservan, y la
+    // posición a cualquier hora sale de interpolar entre dos puntos seguidos. Un día largo (7 h, 66 km) pide unos 760; si ni
+    // con 400 m de tolerancia cabe, se quitan puntos repartidos por todo el día (nunca se corta el final)
+    function track(max = 1000, t0) {
+      const A = analyze(), pts = F.map((f, i) => [f.x, f.z, A.kind[i] === 'up' ? CODE.up : CODE[A.cls[i]], f.t]), base = t0 ?? (F.length ? F[0].t : 0);
+      const sed = (pa, pb, p) => { const dt = pb[3] - pa[3], u = dt > 0 ? (p[3] - pa[3]) / dt : 0; return Math.hypot(p[0] - pa[0] - (pb[0] - pa[0]) * u, p[1] - pa[1] - (pb[1] - pa[1]) * u); };
       const dp = (a0, b0, tol, keep) => {   // sin recursión: un día entero son decenas de miles de puntos
         const todo = [[a0, b0]];
         while (todo.length) {
-          const [a, b] = todo.pop(), A = { x: pts[a][0], z: pts[a][1] }, B = { x: pts[b][0], z: pts[b][1] };
+          const [a, b] = todo.pop();
           let far = -1, dm = tol;
-          for (let i = a + 1; i < b; i++) { const d = segDist(A, B, pts[i][0], pts[i][1]); if (d > dm) { dm = d; far = i; } }
+          for (let i = a + 1; i < b; i++) { const d = sed(pts[a], pts[b], pts[i]); if (d > dm) { dm = d; far = i; } }
           if (far >= 0) { keep[far] = 1; todo.push([a, far], [far, b]); }
         }
       };
@@ -382,7 +388,7 @@
         for (let i = 0; i < pts.length; i++) if (!i || i === pts.length - 1 || pts[i][2] !== pts[i + 1][2] || pts[i][2] !== pts[i - 1][2]) keep[i] = 1;
         let a = 0; for (let i = 1; i < pts.length; i++) if (keep[i]) { dp(a, i, tol, keep); a = i; }
         const out = pts.filter((p, i) => keep[i]);
-        if (out.length <= max || tol > 400) return out.slice(0, max).map(p => [Math.round(p[0]), Math.round(p[1]), p[2]]);
+        if (out.length <= max || tol > 400) return downs(out, max).map(p => [Math.round(p[0]), Math.round(p[1]), p[2], Math.max(0, Math.round((p[3] - base) / 1000))]);
       }
     }
     // Lo que se está haciendo ahora, en una frase
@@ -418,7 +424,7 @@
     let p;
     if (this.S.geo) p = toLocal(f.lat, f.lon, this.S.geo);
     else { const o = this.o || (this.o = f); p = { x: (f.lon - o.lon) * 111320 * Math.cos(o.lat * RAD), z: -(f.lat - o.lat) * 110540 }; }
-    this.lastT = f.t;
+    this.lastT = f.t; if (this.firstT == null) this.firstT = f.t;   // firstT: el t0 del día (la primera posición de la traza)
     return this.d.add({ t: f.t, x: p.x, z: p.z, acc: f.acc, v: f.v, vacc: f.vacc, dir: f.dir, dacc: f.dacc, alt: f.alt });
   };
   Calc.prototype.live = function () { if (!this.cs || Date.now() - this.ct > 4000) { this.cs = this.d.summary(); this.ct = Date.now(); } return this.cs; };   // en directo, como mucho cada 4 s
@@ -434,7 +440,7 @@
     for (let k = 0; k < n; k++) { let v = 0; for (let i = Math.floor(k * F.length / n); i < Math.floor((k + 1) * F.length / n); i++) v = Math.max(v, F[i].v3); sp.push(Math.round(v * 3.6)); }   // la más alta de cada trozo, para no perder los picos
     const R = x => Math.round(x);
     return { station: s.id, desnivel: S.drop, km: S.dist / 1000, horas: S.skiTime / 3600, bajadas: S.runs.length, vmax: S.vmax * 3.6, vmed: S.skiTime ? S.dist / S.skiTime * 3.6 : 0,
-      col, freeride: S.m.f / 1000, track: this.d.track(), speed: sp, source: 'gps',
+      col, freeride: S.m.f / 1000, track: this.d.track(1000, this.firstT), speed: sp, source: 'gps',
       detail: { v: 3, m: Object.fromEntries(Object.entries(S.m).map(([k, v]) => [k, R(v)])), wait: R(S.waitTime), lift: R(S.liftTime), steep: R(S.steep),
         runs: S.runs.map(r => [r.t0, r.t1, R(r.drop), R(r.dist), R(r.vmax * 3.6), r.segs.map(g => [g.c, g.name, R(g.m), R(g.v * 3.6)])]),   // tramo: color, pista, metros, máx. km/h
         rides: S.rides.map(r => [r.label, r.t0, r.t1, R(r.rise), R(r.wait), r.known ? 1 : 0]) } };

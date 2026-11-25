@@ -110,16 +110,19 @@ function simulateDay(seed) {
   for (let k = 10; k < truth.length; k++) { let m = Infinity; for (let j = k - 10; j <= k; j++) m = Math.min(m, truth[j].kind === 'ski' ? truth[j].v3 : 0); T.vmax = Math.max(T.vmax, m); }
 
   // El GPS, a una posición por segundo
-  const fixes = [], phi = Math.exp(-1 / 20), pa = Math.exp(-1 / 60);
+  // MALA=1: señal mala (bajo árboles, cañón): sesgo y precisión peores, más huecos, picos de Doppler y fixes sin velocidad
+  const M = process.env.MALA ? 1 : 0, fixes = [], phi = Math.exp(-1 / 20), pa = Math.exp(-1 / 60);
   let bx = 0, bz = 0, ba = 0;
   for (let k = 0; k < truth.length; k += 10) {
     const p = truth[k];
-    bx = phi * bx + Math.sqrt(1 - phi * phi) * 2.5 * gauss(); bz = phi * bz + Math.sqrt(1 - phi * phi) * 2.5 * gauss(); ba = pa * ba + Math.sqrt(1 - pa * pa) * 8 * gauss();
-    if (rnd() < 0.02 || (p.t > gapAt && p.t < gapAt + 40000)) continue;
+    bx = phi * bx + Math.sqrt(1 - phi * phi) * (M ? 6 : 2.5) * gauss(); bz = phi * bz + Math.sqrt(1 - phi * phi) * (M ? 6 : 2.5) * gauss(); ba = pa * ba + Math.sqrt(1 - pa * pa) * 8 * gauss();
+    if (rnd() < (M ? 0.1 : 0.02) || (p.t > gapAt && p.t < gapAt + 40000)) continue;
     let x = p.x + bx + gauss(), z = p.z + bz + gauss();
-    if (rnd() < 0.015) { const a = rnd() * 2 * Math.PI; x += 30 * Math.cos(a); z += 30 * Math.sin(a); }
-    const v = Math.max(0, p.vh + 0.2 * gauss());
-    fixes.push({ t: p.t, x, z, acc: Math.max(3, 3.5 + 1.5 * Math.abs(gauss())), v, vacc: 0.4, dir: v >= 0.5 ? (p.dir + 3 * gauss() + 360) % 360 : null, dacc: 5, alt: elevation(p.x, p.z) + ba + 3 * gauss() });
+    if (rnd() < (M ? 0.04 : 0.015)) { const a = rnd() * 2 * Math.PI; x += 30 * Math.cos(a); z += 30 * Math.sin(a); }
+    let v = Math.max(0, p.vh + (M ? 0.5 : 0.2) * gauss());
+    if (M && rnd() < 0.02) v += 8 * (rnd() < 0.5 ? 1 : -1) * rnd();   // pico de Doppler
+    v = Math.max(0, v);
+    fixes.push({ t: p.t, x, z, acc: Math.max(3, (M ? 9 : 3.5) + (M ? 4 : 1.5) * Math.abs(gauss())), v, vacc: M ? 1 : 0.4, dir: v >= 0.5 ? (p.dir + 3 * gauss() + 360) % 360 : null, dacc: 5, alt: elevation(p.x, p.z) + ba + 3 * gauss() });
   }
   return { T, fixes };
 }

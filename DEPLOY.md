@@ -21,9 +21,9 @@
 - **Pistas recalculadas (cambio de nombres o colores en Estaciones3D)**, en este orden:
   1. En Estaciones3D: `build_assets.py` de cada estación tocada y `cd web && npm run build:pistea` (la versión **sin marcas** de las estaciones: ni logotipos, ni iconos, ni tipografías, ni fotos oficiales; no uses `npm run build` para Pistea).
   2. Copiar `web/dist/app` a `mapas/` (en Windows, `robocopy <dist/app> <pistea/mapas> /MIR`).
-  3. Aquí: `python scripts/gen_invierno.py`, `node scripts/gen_seguimiento.js`, `node scripts/gen_dificultad.js` y `node scripts/gen_pistas.js`.
+  3. Aquí: `python scripts/gen_invierno.py`, `node scripts/gen_seguimiento.js`, `node scripts/gen_dificultad.js`, `node scripts/gen_pistas.js` y `python scripts/gen_relieve.py` (el relieve de cada estación sobre el que se dibujan los recorridos; va después de `gen_invierno.py`, que reescribe las entradas de `estaciones.json`, y de `gen_seguimiento.js`).
   4. `npm test` y `node scripts/banco_seguimiento.js 12`.
-  5. Publicar los mapas en Cloudflare (arriba) y, después, subir a GitHub. Al arrancar, el servidor crea la tabla `passes` (pasaporte y récords por pista) y la rellena una vez con los días guardados.
+  5. Publicar los mapas en Cloudflare (arriba) y, después, subir a GitHub: la app espera del visor lo que trae la compilación nueva (desde el 25-nov-2026, el repaso del día con `?recorrido=1`; con los mapas viejos, el 3D del repaso se queda sin recorrido). Al arrancar, el servidor crea la tabla `passes` (pasaporte y récords por pista) y la rellena una vez con los días guardados.
   Los días ya guardados conservan los nombres de pista con los que se calcularon. Si una pista cambia de nombre, sus bajadas antiguas siguen en el pasaporte con el nombre viejo y no cuentan para la ficha nueva.
 
 ## 3. Servidor propio con Docker (alternativa)
